@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qwen-ttrpg"
+version = "0.1.0"
+description = "Local Qwen adapter training, verification, evaluation, and serving for tabletop roleplaying assistants."
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dependencies = ["PyYAML>=6,<7", "httpx>=0.28,<1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+reload = ["torch>=2.11,<3", "peft>=0.20,<1", "safetensors>=0.6,<1", "transformers>=5,<6", "bitsandbytes>=0.50,<1", "accelerate>=1.13,<2", "format_conversation_dataset>=0.2,<1"]
+
+[project.scripts]
+ttrpg-train = "qwen_ttrpg.train:main"
+ttrpg-serve = "qwen_ttrpg.serve_models:main"
+ttrpg-benchmark = "qwen_ttrpg.benchmark:main"
+
+[tool.setuptools.packages.find]
+include = ["qwen_ttrpg*"]
+
+[tool.setuptools.package-data]
+qwen_ttrpg = ["recipes/*.yaml", "recipes/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

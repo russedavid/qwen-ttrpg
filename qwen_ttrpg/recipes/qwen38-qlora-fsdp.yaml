@@ -1,0 +1,72 @@
+# Materialize private model/data/output paths for each run; keep this recipe generic.
+base_model: Qwen/Qwen3.8-27B
+revision_of_model: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+plugins:
+  - axolotl.integrations.cut_cross_entropy.CutCrossEntropyPlugin
+chat_template: tokenizer_default
+chat_template_kwargs:
+  enable_thinking: false
+datasets:
+  - path: train.tokens.jsonl
+    ds_type: json
+    type:
+test_datasets:
+  - path: validation.tokens.jsonl
+    ds_type: json
+    type:
+val_set_size: 0.0
+output_dir: adapter
+dataset_prepared_path: prepared
+sequence_len: 2048
+sample_packing: false
+pad_to_sequence_len: false
+load_in_4bit: true
+embeddings_skip_upcast: true
+adapter: qlora
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.0
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - down_proj
+  - up_proj
+  - linear_attn.in_proj_qkv
+  - linear_attn.in_proj_z
+  - linear_attn.out_proj
+micro_batch_size: 1
+gradient_accumulation_steps: 4
+num_epochs: 1
+optimizer: adamw_torch
+lr_scheduler: cosine
+learning_rate: 0.0001
+bf16: true
+tf32: true
+# FSDP owns activation checkpointing; enabling Trainer's second wrapper conflicts.
+gradient_checkpointing: false
+attn_implementation: sdpa
+warmup_ratio: 0.05
+weight_decay: 0.0
+logging_steps: 1
+eval_steps: 10
+save_steps: 10
+save_total_limit: 2
+load_best_model_at_end: true
+metric_for_best_model: eval_loss
+greater_is_better: false
+seed: 42
+train_on_inputs: false
+report_to: none
+use_wandb: false
+fsdp_config:
+  fsdp_version: 2
+  offload_params: true
+  cpu_ram_efficient_loading: false
+  auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  transformer_layer_cls_to_wrap: Qwen3_5DecoderLayer
+  state_dict_type: FULL_STATE_DICT
+  sharding_strategy: FULL_SHARD
+  reshard_after_forward: true
+  activation_checkpointing: true
