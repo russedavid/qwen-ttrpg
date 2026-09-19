@@ -11,8 +11,10 @@ import platform
 import subprocess
 import sys
 import time
+import re
+import math
 
-from .util import digest, now
+from .util import digest, now, file_digest
 
 
 def verify_dataset(directory):
@@ -104,6 +106,10 @@ def materialize(dataset, model, output, recipe, max_steps=None, epochs=None):
             save_steps=max_steps,
             eval_steps=max_steps,
         )
+        # Even a one-step smoke run needs a nonzero learning-rate update. The
+        # trainer otherwise rounds a fractional warm-up up to the entire run.
+        config["warmup_steps"] = min(config.get("warmup_steps") or math.ceil(config.get("warmup_ratio", 0) * max_steps), max_steps - 1)
+        config["warmup_ratio"] = 0.0
     output.mkdir(parents=True)
     path = output / "config.yaml"
     path.write_text(yaml.safe_dump(config, sort_keys=False))
@@ -131,6 +137,7 @@ def materialize(dataset, model, output, recipe, max_steps=None, epochs=None):
         "python": platform.python_version(),
         "packages": versions,
         "max_steps": max_steps,
+        "recipe_sha256": file_digest(recipe),
     }
     (output / "run.json").write_text(json.dumps(metadata, indent=2))
     return path, metadata
@@ -213,25 +220,40 @@ def main():
     p.add_argument("--max-steps", type=int)
     p.add_argument("--epochs", type=float)
     p.add_argument("--prepare-only", action="store_true")
+    p.add_argument("--resume", action="store_true", help="Reuse a matching run; resume the latest saved optimizer checkpoint when available")
     args = p.parse_args()
     if args.max_steps is not None and args.max_steps < 1:
         raise ValueError("max-steps must be positive.")
-    if not args.prepare_only:
-        used = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-            text=True,
+    output = Path(args.output).resolve()
+    if args.resume and output.exists():
+        path = output / "config.yaml"
+        metadata = json.loads((output / "run.json").read_text())
+        if (metadata["config_sha256"] != file_digest(path)
+            or metadata["dataset_manifest"] != verify_dataset(args.dataset)
+            or metadata["model_directory"] != str(Path(args.model).resolve())
+            or metadata.get("recipe_sha256") != file_digest(args.recipe)):
+            raise ValueError("Resume inputs differ from the original training run.")
+        if args.max_steps is not None and args.max_steps != metadata.get("max_steps"):
+            raise ValueError("Resume cannot change the original optimizer-step limit.")
+        if metadata.get("status") == "trained":
+            export = metadata["portable_export"]
+            if (file_digest(output / "portable-adapter/adapter_model.safetensors") != export["export_sha256"]
+                or file_digest(output / "adapter/adapter_model.safetensors") != export["source_sha256"]):
+                raise ValueError("Completed training artifacts changed after export.")
+            print(json.dumps({"status": "already_trained", "output": str(output)}))
+            return
+    else:
+        path, metadata = materialize(
+            args.dataset, args.model, args.output, args.recipe, args.max_steps, args.epochs
         )
-        values = [int(v.strip()) for v in used.splitlines() if v.strip()]
-        if len(values) != 2 or any(v > 1500 for v in values):
-            raise ValueError(
-                "This recipe needs two available GPUs. Stop model serving and audio jobs before training."
-            )
-    path, metadata = materialize(
-        args.dataset, args.model, args.output, args.recipe, args.max_steps, args.epochs
-    )
     if args.prepare_only:
         print(path)
         return
+    used = subprocess.check_output(
+        ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"], text=True)
+    values = [int(v.strip()) for v in used.splitlines() if v.strip()]
+    if len(values) != 2 or any(v > 1500 for v in values):
+        raise ValueError("This recipe needs two available GPUs. Stop model serving and audio jobs before training.")
     env = os.environ.copy()
     env.pop("LD_LIBRARY_PATH", None)
     env.update(
@@ -244,12 +266,23 @@ def main():
     )
     import yaml
 
-    command = launch_command(path, yaml.safe_load(path.read_text()))
-    output = Path(args.output)
+    config = yaml.safe_load(path.read_text())
+    if args.epochs is not None and config["num_epochs"] != args.epochs:
+        raise ValueError("Resume cannot change the original epoch limit.")
+    checkpoints = sorted((p for p in (output / "adapter").glob("checkpoint-*")
+                          if re.fullmatch(r"checkpoint-\d+", p.name) and (p / "trainer_state.json").is_file()),
+                         key=lambda p: int(p.name.split("-")[-1]))
+    if args.resume and checkpoints:
+        config["resume_from_checkpoint"] = str(checkpoints[-1])
+    attempt = int(metadata.get("attempt", 0)) + 1
+    attempt_path = output / f"attempt-{attempt}.yaml"
+    attempt_path.write_text(yaml.safe_dump(config, sort_keys=False))
+    command = launch_command(attempt_path, config)
+    metadata.update(attempt=attempt, resumed_checkpoint=config.get("resume_from_checkpoint"))
     metadata.update(status="running", command=command, started=now())
     (output / "run.json").write_text(json.dumps(metadata, indent=2))
     started = time.monotonic()
-    with (output / "train.log").open("w") as log:
+    with (output / f"train-attempt-{attempt}.log").open("w") as log:
         result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=env)
     metadata.update(
         returncode=result.returncode,

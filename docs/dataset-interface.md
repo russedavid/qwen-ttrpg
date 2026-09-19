@@ -1,5 +1,7 @@
 # Dataset interface
 
+The [BYOD guide](bring-your-own-data.md) describes source formats, task-specific label preparation, review, and the complete three-adapter runner. This page describes the lower-level snapshot contract.
+
 A dataset snapshot is a new directory containing:
 
 - `manifest.json`: sequence length, per-split example counts, and `tokenized_sha256` hashes; formatter exports also include `sources_sha256`.
@@ -32,4 +34,4 @@ row = {
 
 Use real source hashes and meaningful provenance in local data. For generated labels, mark the review origin honestly and validate labels independently; a model's agreement with its own labels is not an independent evaluation. Keep the same source group out of validation/test when it contributed training examples. Rules questions must include the excerpts used to support their answers.
 
-The training runner accepts the original snapshot manifest shape as well as formatter v0.2 snapshots. It validates the tokenized files before training; it cannot reconstruct a missing upstream review or infer that two nominally different source groups actually overlap.
+The training runner accepts the original snapshot manifest shape as well as formatter snapshots. It validates the tokenized files before training; it cannot reconstruct a missing upstream review or infer that two nominally different source groups actually overlap.

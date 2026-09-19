@@ -59,6 +59,9 @@ def run(cases, routing, url, model, output, *, max_tokens=384, seed=42, profile=
         _, adapter = selection(case["task"], routing)
         if adapter is None:
             raise ValueError("Each benchmark task must select a candidate adapter.")
+    if generator is generate:
+        from .annotation import verify_server
+        verify_server(url, routing)
     output.mkdir(parents=True)
     results, keys = [], {}
     for case in cases:
@@ -71,6 +74,21 @@ def run(cases, routing, url, model, output, *, max_tokens=384, seed=42, profile=
                                len(routing["adapters"]), max_tokens, task=case["task"],
                                sampling_profile=profile, seed=seed, schema=case.get("schema"))
             answer["checks"] = score(answer["text"], case.get("checks", {}))
+            if case.get("contract_version") == 1:
+                from .contracts import validate_target
+                try:
+                    actual = validate_target(case["task"], json.loads(case["prompt"][-1]["content"]), json.loads(answer["text"]))
+                    answer["checks"]["schema_and_source_checks"] = True
+                    target = case["target"]
+                    if case["task"] == "classifier":
+                        normalize = lambda events: sorted(packed({k: v for k, v in e.items() if k != "evidence"}) for e in events)
+                        answer["checks"]["matches_reviewed_event_fields"] = normalize(actual["events"]) == normalize(target["events"])
+                    elif case["task"] == "rules":
+                        answer["checks"]["matches_reviewed_calculation"] = actual["calculation"] == target["calculation"]
+                        answer["checks"]["matches_missing_information_decision"] = bool(actual["missing_information"]) == bool(target["missing_information"])
+                except (ValueError, TypeError, KeyError) as exc:
+                    answer["checks"]["schema_and_source_checks"] = False
+                    answer["validation_error"] = str(exc)
             answers[variant] = answer
         # Display order must not disclose randomized execution order or adapter IDs.
         labels = ["base", "adapter"]
@@ -78,6 +96,7 @@ def run(cases, routing, url, model, output, *, max_tokens=384, seed=42, profile=
         keys[case["id"]] = dict(zip(["A", "B"], labels))
         results.append({"id": case["id"], "task": case["task"], "prompt": case["prompt"],
                         "provenance": case["provenance"], "answers": answers,
+                        "reference": case.get("target"),
                         "generation_order": order, "quality_review": "pending"})
         report = {"created": now(), "status": "complete" if len(results) == len(cases) else "running",
                   "case_sha256": digest(packed(cases)), "routing": routing, "model": model,
@@ -100,7 +119,7 @@ def run(cases, routing, url, model, output, *, max_tokens=384, seed=42, profile=
 def render_review(rows, keys, path):
     esc = lambda value: html.escape(value if isinstance(value, str) else json.dumps(value, indent=2))
     parts = ['<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">',
-             '<title>Response review</title><style>body{font:17px system-ui;max-width:1100px;margin:auto;padding:24px;background:#f7f1e7;color:#342c24}pre{white-space:pre-wrap;overflow-wrap:anywhere}.answers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,350px),1fr));gap:24px}article{border-top:1px solid #bba;padding:24px 0}nav a{margin-right:12px}</style>',
+             '<title>Response review</title><style>body{font:17px system-ui;max-width:1100px;margin:auto;padding:24px;background:#f7f1e7;color:#342c24}pre{white-space:pre-wrap;overflow-wrap:anywhere}.answers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,350px),1fr));gap:24px}article{border-top:1px solid #bba;padding:24px 0}nav{display:flex;flex-wrap:wrap;gap:12px}</style>',
              '<h1>Response review</h1><p>Review relevance, continuity, participant agency, unsupported facts, and usefulness. A/B identities and timing are kept in separate files.</p><nav>']
     parts += [f'<a href="#case-{i}">{i+1}</a>' for i in range(len(rows))]
     parts.append('</nav>')
@@ -108,7 +127,8 @@ def render_review(rows, keys, path):
         parts += [f'<article id="case-{i}"><h2>Case {i+1}</h2><pre>{esc(row["prompt"])}</pre><div class="answers">']
         for label in ["A", "B"]:
             answer = row["answers"][keys[row["id"]][label]]
-            parts.append(f'<section><h3>{label}</h3><pre>{esc(answer["text"])}</pre></section>')
+            warning = '<p><strong>Incomplete response.</strong> This generation did not finish.</p>' if not answer.get("complete", True) else ""
+            parts.append(f'<section><h3>{label}</h3>{warning}<pre>{esc(answer["text"])}</pre></section>')
         parts.append('</div></article>')
     Path(path).write_text("".join(parts), encoding="utf-8")
 

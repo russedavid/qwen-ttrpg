@@ -24,3 +24,9 @@ Production sampling and greedy diagnostics answer different questions. The defau
 Read `review.html` before opening `review-key.json` or `results.json`. The former displays only prompts and shuffled responses; the latter files reveal candidate identities and execution metadata. Record separate judgments for responsiveness, continuity, agency, groundedness, and usefulness. Retain disagreements and representative failures rather than reducing everything to a single score.
 
 The original continuation is one plausible response, not unique ground truth. Completion loss measures imitation under a known target; it cannot decide whether an alternative response is more helpful. Semantic quality remains pending until reviewed. Publish results only from data and artifacts that are appropriate to release, with the actual protocol and limitations.
+
+## Integrated three-adapter workflow
+
+`ttrpg-pipeline run` applies the same source/label contracts used for training preparation to generated outputs. Classifier checks distinguish source-grounded event structure from exact agreement with reviewed event fields. Rules checks distinguish valid quotations, tool arguments, and missing-information decisions from the meaning of the answer. Storyteller shape checks leave semantic review pending. Shared rule excerpts across question splits are reported during preparation; they do not establish unseen-document generalization.
+
+The pipeline stores validation and test comparisons separately. Reusing test failures to tune the next candidate changes their role to development evidence. Keep a new untouched assessment for subsequent claims. The generated demo intentionally shares simple synthetic patterns across splits and is only an integration test.

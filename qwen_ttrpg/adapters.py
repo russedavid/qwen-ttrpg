@@ -3,6 +3,7 @@
 from pathlib import Path
 import json
 import shutil
+import tempfile
 
 from .util import digest, now, file_digest
 
@@ -31,23 +32,26 @@ def export_portable(source, destination):
         raise ValueError("Expected one complete adapter tensor file.")
     state = load_file(str(files[0]), device="cpu")
     mapping = portable_keys(state)
-    destination.mkdir(parents=True)
-    shutil.copyfile(source / "adapter_config.json", destination / "adapter_config.json")
-    save_file(
-        {mapping[k]: v for k, v in state.items()},
-        str(destination / "adapter_model.safetensors"),
-    )
-    report = {
-        "created": now(),
-        "source_sha256": file_digest(files[0]),
-        "export_sha256": file_digest(destination / "adapter_model.safetensors"),
-        "tensors": len(state),
-        "renamed": sum(k != v for k, v in mapping.items()),
-        "transformation": "Remove activation-checkpoint wrappers; tensor values unchanged.",
-        "reload_verified": False,
-    }
-    (destination / "export.json").write_text(json.dumps(report, indent=2))
-    return report
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=".exporting-", dir=destination.parent))
+    try:
+        shutil.copyfile(source / "adapter_config.json", temporary / "adapter_config.json")
+        save_file({mapping[k]: v for k, v in state.items()}, str(temporary / "adapter_model.safetensors"))
+        report = {
+            "created": now(), "source_sha256": file_digest(files[0]),
+            "export_sha256": file_digest(temporary / "adapter_model.safetensors"),
+            "tensors": len(state), "renamed": sum(k != v for k, v in mapping.items()),
+            "transformation": "Remove activation-checkpoint wrappers; tensor values unchanged.",
+            "reload_verified": False,
+        }
+        (temporary / "export.json").write_text(json.dumps(report, indent=2))
+        if destination.exists():
+            raise ValueError("Adapter destination appeared during export.")
+        temporary.rename(destination)
+        return report
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
 
 
 def strict_load(base, directory):

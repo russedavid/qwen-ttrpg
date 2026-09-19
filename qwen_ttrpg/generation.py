@@ -45,7 +45,7 @@ def generate(
     usage = {}
     finish = None
     timings = {}
-    with httpx.Client(timeout=600) as client:
+    with httpx.Client(timeout=600, trust_env=False) as client:
         with client.stream(
             "POST", url.rstrip("/") + "/chat/completions", json=payload
         ) as response:

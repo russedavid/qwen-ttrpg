@@ -39,6 +39,7 @@ def test_recipe_is_installed_and_materialized_without_training(tmp_path):
     config, meta = materialize(data, model, tmp_path / "run", recipe, max_steps=1)
     doc = yaml.safe_load(config.read_text())
     assert doc["sequence_len"] == 4096 and doc["max_steps"] == 1
+    assert doc["warmup_steps"] == 0 and doc["warmup_ratio"] == 0
     assert meta["status"] == "prepared"
     command = launch_command(config, doc)
     assert "qwen_ttrpg.fsdp_entry" in command

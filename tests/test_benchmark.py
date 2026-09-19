@@ -47,6 +47,18 @@ def test_contract_checks_are_explicit():
     assert not all(score('invalid', {"equals": {"events": []}}).values())
 
 
+def test_truncated_outputs_remain_failures_in_a_completed_study(tmp_path):
+    def incomplete(*args, **kwargs):
+        return {"text": '{"narration":"A lantern glows."}', "seconds": 1,
+                "complete": False, "finish_reason": "length"}
+    routing = {"adapters": [{"id": 0}], "tasks": {"storyteller": 0}}
+    report = run(cases(), routing, "http://localhost/v1", "fixture", tmp_path / "study", generator=incomplete)
+    assert report["status"] == "complete" and len(report["cases"]) == 8
+    for summary in report["summary"].values():
+        assert summary["complete"] == 0 and summary["control_passes"] == 0
+    assert (tmp_path / "study/review.html").read_text().count("Incomplete response.") == 16
+
+
 def test_stream_request_disables_other_adapters_and_cache(monkeypatch):
     observed = []
     def handler(request):

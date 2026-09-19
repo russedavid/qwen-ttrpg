@@ -2,160 +2,116 @@
 
 Created by [David Russell](https://github.com/russedavid).
 
-Fine-tune and evaluate a local Qwen model for tabletop roleplaying assistance: recognizing game actions, responding to players, and consulting supplied rules. Train separate task adapters, verify that they actually reload, then serve them from **one shared quantized base model**.
+Bring your own conversations and rule references. Prepare and review the examples, fine-tune three Qwen adapters, verify the saved weights, compare them with the base model, and serve them from **one shared quantized base**.
 
-This is training and inference tooling, independent of a campaign application. The game system, setting, source material, and mechanics are supplied externally. No recordings, source conversations, rulebooks, datasets, trained weights, or private experiment reports are included.
+| Adapter | Training example |
+| --- | --- |
+| Game-state classifier | A dialogue window → source-supported actions, claims, outcomes, and state changes |
+| Rules assistant | A question and supplied excerpts → an answer with exact citations and explicit missing information |
+| Storyteller | The preceding exchange → the facilitator's complete response to the players |
 
-## The workflow
-
-```text
-Reviewed conversations / grounded task examples
-                     |
-     Conversational Dataset Formatter
-       split checks + completion masks
-                     |
-          verified dataset snapshot
-                     |
-        QLoRA + FSDP2 on two GPUs
-                     |
-      portable adapter + strict reload
-                     |
-  paired base/adapter evaluation and review
-                     |
-       GGUF conversion -> shared base
-                         |-- classifier adapter
-                         |-- storyteller adapter
-                         `-- rules adapter
-```
-
-| Task | Learn / evaluate | Keep outside the model's authority |
-| --- | --- | --- |
-| Classifier | Distinguish proposed actions from established outcomes; quote supporting dialogue | Unsupported facts and premature state changes |
-| Storyteller | Respond to participant choices with continuity, useful detail, and restraint | Participant decisions and the official conversation record |
-| Rules | Use supplied excerpts, cite evidence, and ask for missing information | Invented or remembered mechanics from another system |
-
-`qwen_ttrpg.tasks` provides system-neutral prompt contracts and original smoke cases. A storyteller response is private, point-in-time guidance. The actual conversation determines what happened; generating or refreshing a suggestion does not establish a game event.
+The game system, speaker mappings, terminology, rule excerpts, and labels are supplied externally. No recordings, source conversations, rulebooks, private datasets, or trained weights are distributed. The included example generator creates short, original synthetic fixtures in a directory you choose outside Git.
 
 ## Install
 
-Python 3.10+ runs the lightweight validation, serving launcher, and HTTP benchmark client:
+Python 3.10+ runs the CPU data/review tooling on Linux or macOS. Git is required during installation: the companion [Conversational Dataset Formatter](https://github.com/russedavid/format_conversation_dataset) is pinned to a specific source revision and installed automatically.
 
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[dev]'
-python -m pytest -q
+python -m pip install -e '.[data,dev]'
+ttrpg-pipeline --help
 ```
 
-GPU training uses a separate **Python 3.12** environment. The recipes target **Qwen3.8-27B**, two 24 GB NVIDIA GPUs, and substantial host RAM for FSDP2 CPU offload. A 128 GB host is the reference configuration. These are bounded recipes, not a claim that arbitrary context sizes or concurrency fit that hardware.
+GPU training uses **Linux, Python 3.12, two 24 GB NVIDIA GPUs, and a 128 GB host** as the reference configuration. Install its dependencies separately:
 
 ```sh
 uv venv .training --python 3.12
 uv pip install --python .training/bin/python --torch-backend cu128 \
-  -r qwen_ttrpg/recipes/training-requirements.txt -e .
+  -r qwen_ttrpg/recipes/training-requirements.txt -e '.[data]'
 ```
 
-Install the current **format_conversation_dataset** checkout in that environment for tokenizer/loss evaluation:
+Download the recipe's **Qwen3.8-27B** model locally, obtain a compatible quantized base, and build a CUDA-enabled **llama.cpp b11043** checkout. No model download is performed by the pipeline. The architecture implementation is named `Qwen3_5DecoderLayer`; changing Qwen architectures requires reviewing the LoRA targets and converter.
+
+## Exercise the complete workflow
+
+Create a small original example outside the repository. These commands use the training environment throughout:
 
 ```sh
-uv pip install --python .training/bin/python \
-  -e '../format_conversation_dataset[tokenize]'
-```
-
-Use the named, locally downloaded model revision in the recipe. The Qwen3.8 configuration uses the `Qwen3_5DecoderLayer` implementation name; that is an architecture class name, not a different model selection. The recipes include linear-attention projections as LoRA targets. Do not assume another Qwen architecture uses the same targets or converter.
-
-## 1. Prepare and verify inputs
-
-The formatter produces `manifest.json` and `train`, `validation`, and optional `test` tokenized JSONL files. Every row contains `input_ids`, `attention_mask`, and `labels`; only the assistant completion has non-`-100` labels. Keep these files outside this checkout.
-
-Use genuinely separate conversation groups for held-out evaluation. For classifiers and rule assistants, prepare reviewed structured responses grounded in the supplied input. Narration alone is not training data for all three tasks. The input contract is described in [the dataset interface](docs/dataset-interface.md).
-
-The launcher verifies snapshot hashes, row counts, label masks, and sequence limits before producing a run configuration. A configuration-only smoke check does not reserve GPUs or start training:
-
-```sh
-.training/bin/python -m qwen_ttrpg.train /path/to/private/snapshot \
+.training/bin/python -m qwen_ttrpg.pipeline init-demo /path/to/private/example \
   --model /path/to/local/qwen \
-  --output /path/to/private/config-check --prepare-only
+  --runtime /path/to/llama.cpp \
+  --base-gguf /path/to/local/base.gguf \
+  --python "$PWD/.training/bin/python"
+
+.training/bin/python -m qwen_ttrpg.pipeline prepare /path/to/private/example/experiment.yaml
+.training/bin/python -m qwen_ttrpg.pipeline plan /path/to/private/example/experiment.yaml
+.training/bin/python -m qwen_ttrpg.pipeline run /path/to/private/example/experiment.yaml
 ```
 
-## 2. Train an adapter
+`init-demo` records synthetic label provenance and limits each task to one optimizer step. It exercises installation, data preparation, training, reload, conversion, and inference. It is **not meaningful model training or a quality benchmark**. Stop other jobs using the GPUs before `run`; the public launcher refuses busy GPUs and does not stop unrelated services.
 
-Stop inference and speech jobs on the training GPUs first. The launcher refuses to start when either GPU is busy; it does not stop other processes itself.
+The runner performs each adapter's training, strict reload, and conversion in sequence. It then starts a temporary loopback server, runs paired base/adapter comparisons on validation and test examples, saves A/B review pages, and stops that server. Semantic review remains pending. To keep the verified adapters available for an application:
 
 ```sh
-.training/bin/python -m qwen_ttrpg.train /path/to/private/snapshot \
-  --model /path/to/local/qwen \
-  --output /path/to/private/training-run
+.training/bin/python -m qwen_ttrpg.pipeline serve /path/to/private/example/experiment.yaml
 ```
 
-The default response recipe uses 4-bit QLoRA, rank 16, BF16 computation, FSDP2 CPU offload, and activation checkpointing. It initializes CPU/GPU collectives before the trainer to support offloaded gradient norms. `--max-steps 1` is a launch smoke test; `--epochs` changes the training duration. Neither is a quality criterion.
+This runs a foreground server, with the configured loopback port and context limit. Its output directory contains the routing file for clients. A storyteller response is private guidance; this toolkit does not insert generated suggestions into an official conversation record or publish them to players.
 
-Each run records the materialized recipe, package versions, dataset manifest, elapsed time, training log, and adapter checks. Training exports a portable adapter by removing activation-checkpoint wrapper components from tensor names **without changing tensor values**. It refuses nonfinite tensors, name collisions, or an adapter with no demonstrated LoRA update.
+## Bring your own data
 
-## 3. Verify reload and compare against the base
+Start with the [complete configuration and review guide](docs/bring-your-own-data.md). The working sequence is:
 
-```sh
-.training/bin/python -m qwen_ttrpg.evaluate_adapter \
-  /path/to/private/snapshot/validation.sources.jsonl \
-  --model /path/to/local/qwen \
-  --adapter /path/to/private/training-run/portable-adapter \
-  --output /path/to/private/paired-generation.json
+```text
+external sources + speaker mappings + question catalog
+                         |
+               candidate review queue
+             /           |           \
+       classifier       rules      storyteller
+       annotations    citations    source responses
+             \           |           /
+         reviewed, source-bound task examples
+                         |
+         three separate dataset snapshots
+                         |
+      train -> strict reload -> convert, per task
+                         |
+      shared base -> paired evaluation -> serve
 ```
 
-This loads the same base for both variants and checks every adapter key, shape, and actual loaded value. `--loss-only --sequence-len 4096` computes token-weighted completion loss instead. Direct Transformers generation here is greedy and diagnostic; production-style sampling and streaming timings are evaluated through the serving benchmark below.
-
-A lower reference loss does not establish a better game response. Evaluate responsiveness to changed participant intent, continuity, agency, unsupported facts, missing-information behavior, and rules citations. The recorded continuation is one reference, not the only correct answer. See [evaluation guidance](docs/evaluation.md).
-
-## 4. Convert and serve one base with task adapters
-
-Build a CUDA-enabled **llama.cpp b11043** checkout and obtain a compatible quantized base separately. The conversion wrapper is tied to that runtime's Qwen converter internals; inspect and retest when changing runtime revisions.
-
 ```sh
-.training/bin/python -m qwen_ttrpg.convert_adapter \
-  --runtime /path/to/llama.cpp --base /path/to/local/qwen \
-  --adapter /path/to/private/training-run/portable-adapter \
-  --output /path/to/private/storyteller.gguf
+ttrpg-pipeline candidates /path/to/private/experiment.yaml
+# Review the generated HTML and edit proposed targets in the local review JSON.
+ttrpg-pipeline review /path/to/private/experiment.yaml \
+  --id CASE_ID --decision keep --origin human --reviewer operator \
+  --reason "Checked the source and label meaning." --response-complete
+ttrpg-pipeline prepare /path/to/private/experiment.yaml
+ttrpg-pipeline run /path/to/private/experiment.yaml
 ```
 
-The wrapper preserves low-rank factors through Qwen head permutations and runs a numerical row/column identity check before conversion. Conversion is a file-format check, not a substitute for comparing generated responses after conversion.
+Optional `annotate` uses a local untuned base to propose classifier/rules labels. Those proposals stay pending. Model-reviewed labels require explicit opt-in and retain their origin. A raw conversation supplies narrator responses, but does not automatically provide reliable event labels or rule answers.
+
+## What is verified
+
+- Reviews bind to source content, response boundaries, task instructions, and target hashes. Source edits invalidate dependent reviews.
+- Conversation groups and source identities stay within one split across all adapters. Rules question families are split separately; shared supplied references are reported explicitly.
+- The full triggering exchange and narrator response are preserved. Native chat-template checks assign loss only to completion tokens and the end token.
+- Training uses rank-16 QLoRA, FSDP2, CPU offload, and activation checkpointing. Saved adapters must contain finite, updated tensors.
+- Portable export preserves tensor values; strict reload checks keys, shapes, and actual values. GGUF conversion verifies the low-rank head-permutation identity.
+- The experiment records input/runtime identities, separate stage attempts, logs, and artifact hashes. Repeating `run` skips verified completed stages and resumes interrupted training from a saved checkpoint when available.
+- Benchmarks verify the server's adapter inventory, apply the training contracts to outputs, and report latency and control results separately from subjective usefulness. A/B display order is independent of execution order.
+
+Source and target checks cannot prove semantic truth. Lower loss does not establish better storytelling. CI exercises code behavior; private data and weights are needed to reproduce a particular model result. This repository reproduces the **method with your data**, not a previously trained model's quality claims.
+
+[Data contracts](docs/dataset-interface.md) · [Evaluation protocol](docs/evaluation.md) · [Workflow verification](docs/verification.md) · [Individual stage commands](docs/individual-stages.md)
+
+## Development
 
 ```sh
-ttrpg-serve --runtime /path/to/llama.cpp \
-  --base /path/to/local/base.gguf \
-  --adapter classifier=/path/to/private/classifier.gguf \
-  --adapter storyteller=/path/to/private/storyteller.gguf \
-  --adapter rules=/path/to/private/rules.gguf \
-  --layout split --tensor-split 1,1 --context 16384 --slots 1 \
-  --output /path/to/private/serving-run
-```
-
-The default CLI layout splits the base across two GPUs. `--layout single` is available when measured headroom permits it. Context is **per slot**; more slots increase KV-cache demand. An asymmetric split can reserve VRAM for another service, but should be capacity-tested on the actual workload.
-
-The server binds to loopback. Each request explicitly selects one adapter and sets every other scale to zero; the base comparison disables all adapters. Prompt cache reuse across adapters is disabled. Different adapter configurations may queue separately: one shared base saves model memory, but does not promise simultaneous execution of all tasks.
-
-Set `TTRPG_MODEL_ROUTING` to the generated `routing.json` when using `routing.selection()` from another application. `--candidate NAME=/path/to/candidate.gguf` loads an unselected comparison adapter. Auditor requests must use the untuned base.
-
-## 5. Run paired serving benchmarks
-
-Generate original smoke cases into a private output directory, or supply your own held-out evaluation cases:
-
-```sh
-python -m qwen_ttrpg.tasks > /path/to/private/smoke-cases.json
-
-ttrpg-benchmark /path/to/private/smoke-cases.json \
-  --routing /path/to/private/serving-run/routing.json \
-  --output /path/to/private/benchmark-run
-```
-
-Open `review.html` for a navigable A/B comparison. Candidate labels are shuffled independently of generation order; the answer key and timing/adapter metadata are in separate files. `results.json` contains completion status, time to first visible text, total latency, token usage, explicit control checks, and provenance. Run identical cases/settings for both variants and account for warm-up.
-
-Benchmarks accept loopback endpoints only. Use an SSH tunnel for a separate GPU machine. Public smoke cases check the harness and a few response contracts; they are not representative benchmarks or evidence of model quality.
-
-## Development and public releases
-
-```sh
+python -m pip install -e '.[dev]'
 python -m pytest -q
 python scripts/check_public_tree.py
 ```
 
-CI runs CPU tests on Python 3.10 and 3.12. GPU training, strict reloads, and throughput need the actual hardware and local models; CI does not claim to perform those jobs. Generated outputs, adapters, local configuration, and source materials are excluded from the repository. The optional release scanner can inspect reachable history with an external private-identifier list.
+CI runs CPU tests on Python 3.10 and 3.12. GPU checks use the separate local environment and actual models. Generated reviews, datasets, reports, weights, and configuration belong outside Git; contributor attribution remains public.

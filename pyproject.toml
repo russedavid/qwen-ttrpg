@@ -4,21 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qwen-ttrpg"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local Qwen adapter training, verification, evaluation, and serving for tabletop roleplaying assistants."
 authors = [{name = "David Russell", email = "10607194+russedavid@users.noreply.github.com"}]
 requires-python = ">=3.10"
 license = "Apache-2.0"
-dependencies = ["PyYAML>=6,<7", "httpx>=0.28,<1"]
+dependencies = ["PyYAML>=6,<7", "httpx>=0.28,<1", "pydantic>=2.13,<3", "jsonschema>=4.26,<5", "format-conversation-dataset @ git+https://github.com/russedavid/format_conversation_dataset.git@324242f821bef0e72d6d2cd9504184aa172583bd"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]
+data = ["transformers>=5,<6", "jinja2>=3.1"]
 reload = ["torch>=2.11,<3", "peft>=0.20,<1", "safetensors>=0.6,<1", "transformers>=5,<6", "bitsandbytes>=0.50,<1", "accelerate>=1.13,<2", "format_conversation_dataset>=0.2,<1"]
 
 [project.scripts]
 ttrpg-train = "qwen_ttrpg.train:main"
 ttrpg-serve = "qwen_ttrpg.serve_models:main"
 ttrpg-benchmark = "qwen_ttrpg.benchmark:main"
+ttrpg-pipeline = "qwen_ttrpg.pipeline:main"
 
 [tool.setuptools.packages.find]
 include = ["qwen_ttrpg*"]
