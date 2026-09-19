@@ -2,6 +2,7 @@
 
 Supply an external --terms-file containing one private identifier per line for a
 release audit. Never commit that list or the audit's private working directory.
+Git author/committer identity is intentional attribution; messages remain scanned.
 """
 
 import argparse
@@ -62,8 +63,10 @@ def main():
             oid, _, path = item.partition(" ")
             if path and git("cat-file", "-t", oid).strip() == b"blob":
                 records.append((path, git("cat-file", "blob", oid)))
-        metadata = git("log", "--branches", "--tags", "--format=%an <%ae>%n%cn <%ce>%n%B")
-        records.append(("commit-metadata", metadata))
+        # Attribution belongs in Git's author/committer fields. Continue checking
+        # messages for private source names, paths, and secrets.
+        messages = git("log", "--branches", "--tags", "--format=%B")
+        records.append(("commit-messages", messages))
     else:
         records = [(p, Path(p).read_bytes()) for p in git("ls-files", "-z").decode().split("\0") if p and Path(p).is_file()]
     for path, payload in records:

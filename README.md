@@ -1,5 +1,7 @@
 # Qwen TTRPG
 
+Created by [David Russell](https://github.com/russedavid).
+
 Fine-tune and evaluate a local Qwen model for tabletop roleplaying assistance: recognizing game actions, responding to players, and consulting supplied rules. Train separate task adapters, verify that they actually reload, then serve them from **one shared quantized base model**.
 
 This is training and inference tooling, independent of a campaign application. The game system, setting, source material, and mechanics are supplied externally. No recordings, source conversations, rulebooks, datasets, trained weights, or private experiment reports are included.

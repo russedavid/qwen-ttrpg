@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "qwen-ttrpg"
 version = "0.1.0"
 description = "Local Qwen adapter training, verification, evaluation, and serving for tabletop roleplaying assistants."
+authors = [{name = "David Russell", email = "10607194+russedavid@users.noreply.github.com"}]
 requires-python = ">=3.10"
 license = "Apache-2.0"
 dependencies = ["PyYAML>=6,<7", "httpx>=0.28,<1"]
