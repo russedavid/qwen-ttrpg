@@ -102,3 +102,25 @@ def test_editing_context_personality_or_target_requires_a_new_review(tmp_path):
     doc["candidates"][0]["review"]["target_sha256"] = "outdated"
     with pytest.raises(ValueError, match="unchanged complete response"):
         datasets(doc, "curious", allow_model_reviews=True)
+
+
+def test_player_contract_and_routing_are_supported_by_the_existing_benchmark():
+    from qwen_ttrpg.contracts import validate_target, output_schema
+    from qwen_ttrpg.routing import selection
+
+    routing = {"adapters": [{"id": 0}, {"id": 1}], "tasks": {"player": 1}}
+    scales, selected = selection("player", routing)
+    assert selected == 1 and [item["scale"] for item in scales] == [0, 1]
+    result = validate_target(
+        "player",
+        {"context": {"available_recipients": [{"id": "table"}]}},
+        {"utterance": "I inspect the visible lock.", "recipient": "table"},
+    )
+    assert result["utterance"].startswith("I inspect")
+    with pytest.raises(ValueError, match="recipient"):
+        validate_target(
+            "player",
+            {"context": {"available_recipients": [{"id": "table"}]}},
+            {"utterance": "Private aside.", "recipient": "unavailable"},
+        )
+    assert output_schema("player")["required"] == ["recipient", "utterance"]
