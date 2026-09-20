@@ -10,7 +10,7 @@ Reserve whole conversation groups before tuning. Keep a development set for iter
 
 ## HTTP benchmark case format
 
-The benchmark takes a JSON array. Each case has `id`, `task` (`classifier`, `storyteller`, or `rules`), `prompt` chat messages, and `provenance.split` (`validation`, `test`, or `synthetic`). Optional `schema` supplies a JSON schema to the local runtime. Optional `checks` has:
+The benchmark takes a JSON array. Each case has `id`, `task` (`classifier`, `storyteller`, `rules`, or `player`), `prompt` chat messages, and `provenance.split` (`validation`, `test`, or `synthetic`). Optional `schema` supplies a JSON schema to the local runtime. Optional `checks` has:
 
 - `equals`: mapping of dot-separated response paths to exact expected values. Numeric path elements select array positions.
 - `nonempty`: top-level fields that must contain a truthy value.
