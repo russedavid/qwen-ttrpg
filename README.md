@@ -115,3 +115,5 @@ python scripts/check_public_tree.py
 ```
 
 CI runs CPU tests on Python 3.10 and 3.12. GPU checks use the separate local environment and actual models. Generated reviews, datasets, reports, weights, and configuration belong outside Git; contributor attribution remains public.
+
+For separate player personalities, see the [individual player adapter workflow](docs/player-adapters.md). It prepares source-preserving, reviewed response datasets for the existing training and serving tools; each adapter is selected independently by the application.

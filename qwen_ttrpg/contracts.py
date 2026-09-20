@@ -20,7 +20,9 @@ class Evidence(Record):
 
 
 class Event(Record):
-    kind: Literal["entity", "fact", "claim", "resource", "action", "resolve", "knowledge"]
+    kind: Literal[
+        "entity", "fact", "claim", "resource", "action", "resolve", "knowledge"
+    ]
     entity: str = Field(min_length=1)
     attribute: str = Field(min_length=1)
     value: str | int | float | bool | None
@@ -41,10 +43,15 @@ class Event(Record):
             if self.value is not None and type(self.value) is not int:
                 raise ValueError("Resource totals must be integers.")
         elif self.delta is not None or self.value is None:
-            raise ValueError("Non-resource events need a value and cannot have a delta.")
+            raise ValueError(
+                "Non-resource events need a value and cannot have a delta."
+            )
         if self.kind == "action" and self.stage == "established":
             raise ValueError("Describe a completed outcome as a fact or resolution.")
-        if self.kind in {"entity", "fact", "resolve", "knowledge"} and self.stage != "established":
+        if (
+            self.kind in {"entity", "fact", "resolve", "knowledge"}
+            and self.stage != "established"
+        ):
             raise ValueError("State changes require an established outcome.")
         if self.kind == "claim" and self.stage != "reported":
             raise ValueError("A reported claim is not an established fact.")
@@ -79,7 +86,17 @@ class Narration(Record):
     narration: str = Field(min_length=1)
 
 
-MODELS = {"classifier": Extraction, "rules": RulesAnswer, "storyteller": Narration}
+class PlayerReply(Record):
+    utterance: str = Field(min_length=1, max_length=3000)
+    recipient: str = Field(default="table", min_length=1)
+
+
+MODELS = {
+    "classifier": Extraction,
+    "rules": RulesAnswer,
+    "storyteller": Narration,
+    "player": PlayerReply,
+}
 
 
 def exact_quote(source, quote):
@@ -105,6 +122,7 @@ def output_schema(task):
         elif isinstance(item, list):
             for child in item:
                 visit(child)
+
     visit(schema)
     return schema
 
@@ -113,14 +131,21 @@ def validate_target(task, body, target):
     parsed = MODELS[task].model_validate(target)
     if task == "classifier":
         target_turns = {t["turn"] for t in body["target_turns"]}
-        lookup = {t["turn"]: t["text"] for t in body.get("context_only", []) + body["target_turns"]}
+        lookup = {
+            t["turn"]: t["text"]
+            for t in body.get("context_only", []) + body["target_turns"]
+        }
         prior = {e["id"]: e for e in body.get("prior_events", [])}
         for event in parsed.events:
             if not target_turns.intersection(e.turn for e in event.evidence):
-                raise ValueError("Each event must cite the target window, not only earlier context.")
+                raise ValueError(
+                    "Each event must cite the target window, not only earlier context."
+                )
             for evidence in event.evidence:
                 if evidence.turn not in lookup:
-                    raise ValueError("An event cites a turn outside its supplied window.")
+                    raise ValueError(
+                        "An event cites a turn outside its supplied window."
+                    )
                 exact_quote(lookup[evidence.turn], evidence.quote)
             for reference in [event.resolves, event.supersedes]:
                 if reference and reference not in prior:
@@ -134,7 +159,9 @@ def validate_target(task, body, target):
                 raise ValueError("A citation points to an unsupplied rule excerpt.")
             exact_quote(lookup[citation.id], citation.quote)
         if not parsed.citations and not parsed.missing_information:
-            raise ValueError("An answer needs cited evidence or an explicit information gap.")
+            raise ValueError(
+                "An answer needs cited evidence or an explicit information gap."
+            )
         if parsed.calculation:
             if parsed.missing_information:
                 raise ValueError("Missing inputs must be resolved before a tool call.")
@@ -143,10 +170,24 @@ def validate_target(task, body, target):
             if call.tool not in tools:
                 raise ValueError("The calculation tool was not declared in this input.")
             try:
-                Draft202012Validator(tools[call.tool]["parameters"]).validate(call.arguments)
+                Draft202012Validator(tools[call.tool]["parameters"]).validate(
+                    call.arguments
+                )
             except ValidationError as exc:
-                raise ValueError("Calculation arguments violate the declared tool schema.") from exc
+                raise ValueError(
+                    "Calculation arguments violate the declared tool schema."
+                ) from exc
             # Tool inputs are supplied by the caller, never inferred from prose.
             if call.arguments != body.get("tool_inputs", {}).get(call.tool):
-                raise ValueError("Calculation arguments must equal the explicit supplied inputs.")
+                raise ValueError(
+                    "Calculation arguments must equal the explicit supplied inputs."
+                )
+    elif task == "player":
+        recipients = {
+            r["id"] for r in body.get("context", {}).get("available_recipients", [])
+        } or {"table", "facilitator"}
+        if parsed.recipient not in recipients:
+            raise ValueError(
+                "The player selected a recipient outside the supplied perspective."
+            )
     return parsed.model_dump()
