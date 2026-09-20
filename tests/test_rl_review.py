@@ -23,11 +23,16 @@ def test_review_requires_aligned_candidate_runs_and_escapes_model_text(tmp_path)
         p = tmp_path / f"{label}.json"
         p.write_text(json.dumps(report(label)))
         paths.append(p)
-    render(paths, tmp_path / "review")
+    notes = [{"candidate": "grpo", "id": "original", "seed": 42,
+              "reviewer": "Assistant", "finding": "Correct result; <script> is source text."},
+             {"candidate": "base", "id": "original", "seed": 314,
+              "reviewer": "Assistant", "finding": "Different attempt; do not display."}]
+    render(paths, tmp_path / "review", notes=notes)
     content = (tmp_path / "review/review.html").read_text()
     assert "&lt;script&gt;" in content and "<script>" not in content
     assert "&lt;img" in content and "<img " not in content
-    assert all(f"<h3>{label}</h3>" in content for label in ["base", "sft", "grpo"])
+    assert all(f"<h3>{label}</h3>" in content for label in ["Base model", "Supervised baseline", "grpo"])
+    assert content.count("Correct result;") == 1 and "Different attempt" not in content
     changed = report("grpo")
     changed["cases"][0]["generation_seed"] = 77
     paths[-1].write_text(json.dumps(changed))

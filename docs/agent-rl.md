@@ -2,6 +2,8 @@
 
 This optional experiment trains a Qwen3.5-4B LoRA to retrieve evidence, answer structured factual questions, and ask for missing information. It uses Story Copilot's actual evidence tools in an authored environment. Its score checks explicit conclusions and sources; free-form writing quality requires separate review.
 
+The [recorded development results](agent-rl-results.md) compare base, short and extended supervised training, and RL, including the independent cases, failures, runtime, and memory measurements.
+
 The 4B adapter belongs to the 4B base. It does not replace or attach to the existing 27B task/player adapters. Model files and every generated artifact stay outside the repository.
 
 ## Environment
@@ -13,7 +15,7 @@ Install the pinned GPU dependencies, this toolkit, and a checkout of Story Copil
 ```sh
 uv venv .rl --python 3.12 --python-preference only-managed
 uv pip install --python .rl/bin/python --torch-backend cu128 \
-  -r qwen_ttrpg/recipes/agent-rl-requirements.txt -e . -e ../story-copilot
+  -r qwen_ttrpg/recipes/agent-rl-requirements.txt -e '.[dev]' -e ../story-copilot
 ```
 
 Download [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) separately into a local model directory. The runner loads local files only. Use the same model revision, frozen environment, and decoding settings for every comparison.
@@ -53,6 +55,8 @@ The native default template removes empty reasoning prefixes from earlier turns.
 
 Inspect `run.json`, `metrics.jsonl`, and `rollouts.jsonl`. Track success, individual reward components, reward variance, unnecessary calls, invalid actions, truncation, gradient norms, changed tensors, and memory. A rising shaped reward alone does not establish better decisions. A zero-variance group supplies no relative learning signal.
 
+The recorded `unnecessary_calls` field counts calls above the authored reference path's length. That path knows the scenario's construction; an extra lookup can be reasonable before the agent knows which input is missing. Interpret this counter as distance from the reference, not a judgment that every extra call was wasteful. Task success depends on the conclusion and declared valid evidence sets, not following the demonstration's action order.
+
 To continue a compatible checkpoint toward a larger total step target:
 
 ```sh
@@ -83,5 +87,7 @@ Create an aligned review for one partition:
 ```
 
 Open `review.html`. It shows the task, each candidate's decisions and tool results, the source world, the checker target, and acceptable citations. Dataset/settings mismatches are rejected. Set Story Copilot's `STORY_EXPERIMENTS` to the parent of private review directories to browse them from the local app.
+
+Optional `--notes /path/to/private/review.json` adds source-review annotations. Its `findings` list binds each note to `candidate`, `id`, and `seed`, with `reviewer` and `finding` text. Keep reviewer identity and calibration status explicit; automatic checks and assistant review are different evidence.
 
 CPU tests exercise reward shortcuts and report alignment. With the training environment, also run `python -m pytest tests/test_rl_tensor_contract.py -q` to check batched episode identity, padding removal, and external-token masks. Actual GPU training and held-out model behavior remain separate checks.
