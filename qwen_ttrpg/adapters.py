@@ -54,7 +54,7 @@ def export_portable(source, destination):
             shutil.rmtree(temporary)
 
 
-def strict_load(base, directory):
+def strict_load(base, directory, *, trainable=False):
     """Check names, shapes, load result and actual values, never just file presence."""
     import torch
     from peft import PeftConfig, get_peft_model
@@ -66,7 +66,7 @@ def strict_load(base, directory):
 
     directory = Path(directory)
     config = PeftConfig.from_pretrained(str(directory), local_files_only=True)
-    config.inference_mode = True
+    config.inference_mode = not trainable
     model = get_peft_model(base, config)
     state = load_file(str(directory / "adapter_model.safetensors"), device="cpu")
     expected = get_peft_model_state_dict(model)
@@ -88,7 +88,7 @@ def strict_load(base, directory):
         for k in state
     ):
         raise ValueError("Loaded adapter values differ from saved weights.")
-    model.eval()
+    model.train(trainable)
     return model, {
         "tensors_loaded_and_compared": len(state),
         "missing_adapter_keys": 0,

@@ -117,3 +117,5 @@ python scripts/check_public_tree.py
 CI runs CPU tests on Python 3.10 and 3.12. GPU checks use the separate local environment and actual models. Generated reviews, datasets, reports, weights, and configuration belong outside Git; contributor attribution remains public.
 
 For separate player personalities, see the [individual player adapter workflow](docs/player-adapters.md). It prepares source-preserving, reviewed response datasets for the existing training and serving tools; each adapter is selected independently by the application.
+
+The optional [agent RL workflow](docs/agent-rl.md) trains a separate 4B evidence-decision policy with supervised warm-up and GRPO, then compares base, supervised-only, and RL candidates on the same authored tasks. It reuses Story Copilot's read-only tools and records complete trajectories, source checks, timing, and adapter verification.
