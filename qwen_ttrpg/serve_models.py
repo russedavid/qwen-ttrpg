@@ -13,7 +13,7 @@ from .util import digest, now, file_digest
 
 def command(
     runtime, base, adapters, port=8091, layout="single", slots=1, context=16384,
-    tensor_split=None,
+    tensor_split=None, model_alias="qwen3.8-27b-q4", chat_template=None,
 ):
     if layout not in {"single", "split"} or slots not in {1, 2, 3, 4}:
         raise ValueError("Choose single/split layout and one to four slots.")
@@ -33,7 +33,7 @@ def command(
         "-m",
         str(base),
         "--alias",
-        "qwen3.8-27b-q4",
+        model_alias,
         "--host",
         "127.0.0.1",
         "--port",
@@ -55,6 +55,8 @@ def command(
         result += ["--split-mode", "layer", "--tensor-split", tensor_split or "1,1"]
     else:
         result += ["--split-mode", "none", "--main-gpu", "0"]
+    if chat_template:
+        result += ["--chat-template-file", str(chat_template)]
     if adapters:
         if any(any(c in str(p) for c in [",", ":"]) for p in adapters):
             raise ValueError("Adapter filenames may not contain commas or colons.")
@@ -78,8 +80,17 @@ def main():
     p.add_argument("--slots", type=int, default=1)
     p.add_argument("--context", type=int, default=16384)
     p.add_argument("--port", type=int, default=8091)
+    p.add_argument("--model-alias", default="qwen3.8-27b-q4")
+    p.add_argument("--gpu", type=int, help="Physical GPU index for the single-GPU layout")
+    p.add_argument("--chat-template", help="Explicit inference template, including a saved training template")
     p.add_argument("--output", required=True)
     args = p.parse_args()
+    if args.gpu is not None and (args.gpu < 0 or args.layout != "single"):
+        p.error("--gpu requires a nonnegative index and --layout single.")
+    if not args.model_alias.strip():
+        p.error("Use a nonempty model alias.")
+    if args.chat_template:
+        args.chat_template = str(Path(args.chat_template).resolve(strict=True))
     output = Path(args.output)
     if output.exists():
         raise ValueError("Choose a new serving-run directory.")
@@ -88,7 +99,7 @@ def main():
     tasks = {}
     for item in args.adapter:
         task, path = item.split("=", 1)
-        if task not in {"classifier", "storyteller", "rules"} or task in tasks:
+        if task not in {"classifier", "storyteller", "rules", "planner"} or task in tasks:
             raise ValueError("Each supported task may select one adapter.")
         path = Path(path).resolve(strict=True)
         tasks[task] = len(inventory)
@@ -121,6 +132,8 @@ def main():
         args.slots,
         args.context,
         args.tensor_split,
+        args.model_alias,
+        args.chat_template,
     )
     output.mkdir(parents=True)
     (output / "routing.json").write_text(
@@ -136,11 +149,14 @@ def main():
         "context_per_slot": args.context,
         "tensor_split": args.tensor_split or ("1,1" if args.layout == "split" else None),
         "status": "starting",
+        "model_alias": args.model_alias,
+        "gpu": args.gpu,
+        "chat_template_sha256": file_digest(args.chat_template) if args.chat_template else None,
         "note": "Request-specific adapters share one base. Different adapter configurations may be scheduled separately by llama.cpp.",
     }
     (output / "run.json").write_text(json.dumps(metadata, indent=2))
     env = os.environ.copy()
-    env["CUDA_VISIBLE_DEVICES"] = "0" if args.layout == "single" else "0,1"
+    env["CUDA_VISIBLE_DEVICES"] = str(args.gpu if args.gpu is not None else 0) if args.layout == "single" else "0,1"
     with (output / "server.log").open("w") as log:
         proc = subprocess.Popen(argv, env=env, stdout=log, stderr=subprocess.STDOUT)
         stopped = False

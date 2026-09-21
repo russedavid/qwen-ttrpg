@@ -91,3 +91,19 @@ Open `review.html`. It shows the task, each candidate's decisions and tool resul
 Optional `--notes /path/to/private/review.json` adds source-review annotations. Its `findings` list binds each note to `candidate`, `id`, and `seed`, with `reviewer` and `finding` text. Keep reviewer identity and calibration status explicit; automatic checks and assistant review are different evidence.
 
 CPU tests exercise reward shortcuts and report alignment. With the training environment, also run `python -m pytest tests/test_rl_tensor_contract.py -q` to check batched episode identity, padding removal, and external-token masks. Actual GPU training and held-out model behavior remain separate checks.
+
+
+## Serve the learned decision policy
+
+Export the adapter using the same HF base revision, then serve the matching base and adapter together. The saved training template keeps multi-turn prefixes consistent with training:
+
+```sh
+python -m qwen_ttrpg.serve_models \
+  --runtime /path/to/llama.cpp --base /path/to/private/4b-base.gguf \
+  --adapter planner=/path/to/private/rl-adapter.gguf \
+  --chat-template /path/to/private/rl/adapter/chat_template.jinja \
+  --model-alias evidence-policy --layout single --gpu 1 \
+  --context 8192 --port 8093 --output /path/to/private/planner-serving
+```
+
+The server writes its ordered adapter inventory and routing configuration. Point Story Copilot's optional **Dedicated decision planner** at this endpoint and use that inventory. The larger writing model can remain on the other GPU. Measure the actual loaded models, context caches, and simultaneous speech workload on your machine before relying on this arrangement; idle memory alone does not establish concurrent capacity. The live bridge falls back to the main model if the policy endpoint fails or its complete context does not fit. Its numerical proposals are not accepted as rulings without separate source validation and calculation.

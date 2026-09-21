@@ -38,3 +38,15 @@ def test_serving_preserves_application_context_and_exposes_measured_split():
             command("r", "b", [], layout="split", tensor_split=value)
     with pytest.raises(ValueError, match="requires"):
         command("r", "b", [], tensor_split="4,1")
+
+
+def test_small_policy_server_preserves_alias_and_saved_training_template():
+    from qwen_ttrpg.serve_models import command
+
+    args = command("/runtime", "/small.gguf", ["/policy.gguf"],
+                   model_alias="evidence-policy", chat_template="/training.jinja",
+                   context=8192, port=8093)
+    assert args[args.index("--alias") + 1] == "evidence-policy"
+    assert args[args.index("--chat-template-file") + 1] == "/training.jinja"
+    assert args[args.index("--lora-scaled") + 1] == "/policy.gguf:0.0"
+    assert args[args.index("--ctx-size") + 1] == "8192"
