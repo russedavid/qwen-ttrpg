@@ -64,3 +64,16 @@ The rewards test narrow structured outcomes. The supervised data supplies one au
 The `unnecessary_calls` counter measures calls beyond an oracle-authored reference path; it can include reasonable exploration. It is a diagnostic, not proof that a lookup was wasteful. Revised-rule interpretation remains an observed weakness even when citations are valid. The experimental adapter has not replaced the live copilot's configured model.
 
 The [reproduction guide](agent-rl.md) covers preparation, training, checkpoint continuation, independent evaluation, and side-by-side trace review. The source baseline is Story Copilot `05cac8a` and this toolkit's training implementation `dc80a56`. The repository provides the method and original fixture generator; training outputs and weights remain outside Git.
+
+
+## Serving integration and quantization check
+
+The trained policy was subsequently exported for the live Story Copilot. This is a separate development check, not a replacement for the reserved 72-attempt comparison above. The trained adapter was unchanged.
+
+On 24 fresh authored development tasks with greedy decoding, the BF16 and Q8_0 serving copies produced the same structured conclusions and citation lists in all 24 cases. Both passed 23/24 complete contracts; the same remaining numerical error failed both. Median complete tool-trajectory time was 1.37 seconds for BF16 and 1.04 seconds for Q8_0 in this run. These small, sequential measurements do not establish a general speed or accuracy advantage.
+
+The check caught a serialization failure before promotion: an alphabetically property-ordered JSON Schema grammar prevented the trained `action, value, sources` continuation from emitting citations after `value`. Exact-contract passes were initially 0/24 despite many correct values. Using a JSON-object grammar followed by full schema validation restored the expected behavior. The original trained contract also did not require the live application's intent field; the bridge derives missing labels only from typed evidence fields. General narrative and social decisions retain the main planner because they were outside the RL curriculum.
+
+The Q8_0 base occupies approximately 4,386.5 MiB on disk. With the policy and speech worker sharing one 24 GiB GPU, two synthesized clips of approximately 35 and 33 seconds completed while policy inference overlapped speech processing. The sampled GPU-memory peak was 21,177 MiB. Warm speech processing took 2.36 and 2.06 seconds; model loading added 6.88 seconds to the first clip. The larger writing model remained on the other GPU. These are bounded coexistence checks with clean synthetic voices and a known speaker-count prior, not proof of capacity for every context, batch size, or audio workload.
+
+The live application never treats the policy's terminal numbers as verified rulings. It checks source-bound calculator inputs, rejects explicitly superseded values, and displays deterministic results. See [live integration](https://github.com/russedavid/story-copilot/blob/main/docs/live-planner.md) and the [audio-workflow evaluation](https://github.com/russedavid/story-copilot/blob/main/docs/evaluation.md#audio-through-the-full-workflow).
