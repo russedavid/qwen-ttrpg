@@ -92,6 +92,8 @@ ttrpg-pipeline run /path/to/private/experiment.yaml
 
 Optional `annotate` uses a local untuned base to propose classifier/rules labels. Those proposals stay pending. Model-reviewed labels require explicit opt-in and retain their origin. A raw conversation supplies narrator responses, but does not automatically provide reliable event labels or rule answers.
 
+For storyteller data needing speaker-boundary repair or editorial work, use the [response workshop](docs/story-workshop.md). It preserves source text, records corrections and edited targets separately, and exports the existing training format. The [training strategy](docs/storyteller-strategy.md) describes data comparisons, preference training and quality gates.
+
 ## What is verified
 
 - Reviews bind to source content, response boundaries, task instructions, and target hashes. Source edits invalidate dependent reviews.
