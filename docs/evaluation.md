@@ -10,6 +10,31 @@ Reserve whole conversation groups before tuning. Keep a development set for iter
 
 ## HTTP benchmark case format
 
+For a base model, a previous adapter, and a new candidate, use the same cases and
+server inventory for every response:
+
+```sh
+python -m qwen_ttrpg.candidate_benchmark /private/cases.json \
+  --routing /private/server-routing.json \
+  --variants '{"base": null, "previous": 0, "candidate": 1}' \
+  --url http://127.0.0.1:8091/v1 --model your-served-model \
+  --seed 42 --output /private/new-comparison
+```
+
+Use the server's actual adapter IDs and complete ordered inventory. The command
+accepts two to eight candidates and explicitly disables every unselected adapter.
+It writes `review.html` and `blind.json` with shuffled answer labels. Save your
+ratings before opening `review-key.json` or the unblinded `results.json`.
+Generation order is randomized independently of review labels. Repeat with a
+different seed and a new output directory; repeated seeds do not create new
+independent scenarios. The harness rejects training-split cases, but you must
+also keep related scenes and source groups separated when preparing the data.
+
+Judge source fidelity, responsiveness, and useful writing separately. A preferred
+voice, lower validation loss, or valid JSON alone does not justify deployment.
+See the [storyteller pilot](storyteller-results.md) for an example where these
+signals disagreed.
+
 The benchmark takes a JSON array. Each case has `id`, `task` (`classifier`, `storyteller`, `rules`, or `player`), `prompt` chat messages, and `provenance.split` (`validation`, `test`, or `synthetic`). Optional `schema` supplies a JSON schema to the local runtime. Optional `checks` has:
 
 - `equals`: mapping of dot-separated response paths to exact expected values. Numeric path elements select array positions.

@@ -125,7 +125,7 @@ def render_review(rows, keys, path):
     parts.append('</nav>')
     for i, row in enumerate(rows):
         parts += [f'<article id="case-{i}"><h2>Case {i+1}</h2><pre>{esc(row["prompt"])}</pre><div class="answers">']
-        for label in ["A", "B"]:
+        for label in sorted(keys[row["id"]]):
             answer = row["answers"][keys[row["id"]][label]]
             warning = '<p><strong>Incomplete response.</strong> This generation did not finish.</p>' if not answer.get("complete", True) else ""
             parts.append(f'<section><h3>{label}</h3>{warning}<pre>{esc(answer["text"])}</pre></section>')
