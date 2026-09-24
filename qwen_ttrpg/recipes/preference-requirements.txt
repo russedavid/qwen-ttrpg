@@ -1,0 +1,3 @@
+# The preference runner verifies this TRL release's existing-adapter reference path.
+-r training-requirements.txt
+trl==1.9.0

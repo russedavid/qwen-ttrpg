@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from importlib.metadata import version
 import json
 import math
 from pathlib import Path
@@ -56,7 +57,7 @@ def token_rows(rows, tokenizer, max_length):
     for row in rows:
         prefix = tokenizer.apply_chat_template(row["prompt"], tokenize=True, return_dict=False,
                                                add_generation_prompt=True, enable_thinking=False)
-        lengths = {}
+        lengths, hashes = {}, {}
         for side in ("chosen", "rejected"):
             full = tokenizer.apply_chat_template(row["prompt"] + [{"role":"assistant", "content":row[side]}],
                                                  tokenize=True, return_dict=False, enable_thinking=False)
@@ -65,13 +66,15 @@ def token_rows(rows, tokenizer, max_length):
             if tokenizer.eos_token_id not in full[len(prefix):]:
                 raise ValueError("Preference completion is missing its end token.")
             lengths[side] = len(full) - len(prefix)
+            hashes[side] = digest(packed(full[len(prefix):]))
         # Conversational rows avoid TRL appending another EOS after the native
         # end-of-turn newline. Per-row template kwargs match serving exactly.
         encoded.append({"prompt":row["prompt"],
                         "chosen":[{"role":"assistant", "content":row["chosen"]}],
                         "rejected":[{"role":"assistant", "content":row["rejected"]}],
                         "chat_template_kwargs":{"enable_thinking":False}})
-        audit.append({"id":row["id"], "prompt_tokens":len(prefix), "completion_tokens":lengths})
+        audit.append({"id":row["id"], "prompt_tokens":len(prefix), "completion_tokens":lengths,
+                      "prompt_sha256":digest(packed(prefix)), "completion_sha256":hashes})
     return encoded, audit
 
 
@@ -101,6 +104,7 @@ def train(args):
     output.mkdir(parents=True, mode=0o700)
     record = {"status":"starting", "created":now(), "args":vars(args),
               "dataset_sha256":file_digest(args.data), "adapter_sha256":file_digest(Path(args.adapter)/'adapter_model.safetensors'),
+              "packages":{name:version(name) for name in ('torch','transformers','trl','peft','accelerate','bitsandbytes')},
               "template_sha256":digest(tokenizer.chat_template), "mask_audits":audits,
               "review_origins":dict(Counter(row['review']['origin'] for rows in pairs.values() for row in rows)),
               "reference":"Frozen copy of the selected SFT adapter; not the unadapted base."}
@@ -147,7 +151,10 @@ def train(args):
             for i,row in enumerate(ds):
                 expected=audits[split][i]
                 if (len(row['prompt_ids'])!=expected['prompt_tokens'] or
-                    any(len(row[k+'_ids'])!=expected['completion_tokens'][k] for k in ['chosen','rejected'])):
+                    digest(packed(row['prompt_ids']))!=expected['prompt_sha256'] or
+                    any(len(row[k+'_ids'])!=expected['completion_tokens'][k] or
+                        digest(packed(row[k+'_ids']))!=expected['completion_sha256'][k]
+                        for k in ['chosen','rejected'])):
                     raise ValueError('TRL tokenization differs from the serving-template audit.')
             cached=[{'id':pairs[split][i]['id'],'chosen':float(r['ref_chosen_logps']),
                      'rejected':float(r['ref_rejected_logps'])} for i,r in enumerate(ds)]
@@ -161,8 +168,13 @@ def train(args):
         updated=sum(not torch.equal(state[n].detach().cpu(),v) for n,v in initial.items())
         if not updated or any(not torch.isfinite(state[n]).all().item() for n in initial):
             raise ValueError('Preference training did not produce finite adapter updates.')
+        reference_unchanged=all(torch.equal(p.detach().cpu(),initial[n.replace('.ref.','.default.')])
+                                for n,p in state.items() if '.ref.' in n)
+        if not reference_unchanged:
+            raise ValueError('The frozen SFT reference changed during preference training.')
         record['portable_export']=export_portable(output/'adapter',output/'portable-adapter')
         record.update(status='trained',metrics=result.metrics,updated_tensors=updated,
+                      reference_unchanged_after_training=reference_unchanged,
                       seconds=time.monotonic()-started,peak_allocated=[torch.cuda.max_memory_allocated(i) for i in range(2)])
     except BaseException as exc:
         record.update(status='failed',error=str(exc),seconds=time.monotonic()-started)
@@ -182,7 +194,7 @@ def main():
     p.add_argument('--steps',type=int)
     p.add_argument('--seed',type=int,default=42)
     args=p.parse_args()
-    if args.max_length<1 or not 0<args.learning_rate<.01 or not 0<args.beta or not 0<args.epochs<=10 or (args.steps is not None and args.steps<1):
+    if args.max_length<1 or not 0<args.learning_rate<.01 or not (math.isfinite(args.beta) and 0<args.beta) or not 0<args.epochs<=10 or (args.steps is not None and args.steps<1):
         p.error('Use positive, bounded training settings.')
     print(packed(train(args)))
 
