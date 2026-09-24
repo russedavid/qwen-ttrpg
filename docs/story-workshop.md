@@ -74,3 +74,11 @@ prepare(datasets, '/path/to/private/tokenized-snapshot', tokenizer, sequence_len
 ```
 
 Both training and independent validation must be nonempty. Inspect mask audits and omissions. For the workshop's `dialogue` field, overlength examples are omitted rather than silently shortened. Recover a sufficient input or validate a larger window. See the [training strategy](storyteller-strategy.md) before selecting another checkpoint.
+
+## Validate mined excerpts
+
+For externally proposed excerpts, `qwen_ttrpg.story_spans.candidate(source, proposal, contract)` checks quotations against the original turns. A proposal supplies `background`, `participant`, and `facilitator` span lists; each span has `turn`, `role`, and `quote`. It also supplies `rewritten`, `skill`, `reason`, and `creative_scope`. The source and writer contract use the formats above.
+
+Each quote must identify exactly one original passage, allowing only whitespace differences. Inputs must precede the earliest target character; overlaps, conflicting roles and future speech are rejected. The returned record preserves original coordinates and revisions, and its review remains pending. Text-based role attribution is explicitly unverified against audio.
+
+These checks establish where the text came from, not whether the input is sufficient. A short question may depend on a person, location, prior event or rule missing from the selected spans. Recover earlier material before accepting such a training example. In evaluation, do not score recall of facts the model never received.

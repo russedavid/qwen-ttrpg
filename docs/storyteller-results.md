@@ -1,5 +1,7 @@
 # Storyteller retraining pilot
 
+This is the earlier 47-example pilot. The [subsequent data, learning-rate and DPO experiment](storyteller-preference-results.md) reports a separate held-out comparison; its figures should not be pooled with this one.
+
 A response-focused QLoRA pilot improved editorial preference and validation loss, but did not beat the base model on strict source-and-task checks. The new adapter is retained as an experimental candidate; Story Copilot keeps the base writer as its default. Factual and numerical answers use the base writer even when a workspace selects a creative adapter.
 
 ## Training and verification

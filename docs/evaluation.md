@@ -32,8 +32,9 @@ also keep related scenes and source groups separated when preparing the data.
 
 Judge source fidelity, responsiveness, and useful writing separately. A preferred
 voice, lower validation loss, or valid JSON alone does not justify deployment.
-See the [storyteller pilot](storyteller-results.md) for an example where these
-signals disagreed.
+See the [storyteller pilot](storyteller-results.md) and the subsequent
+[supervised and preference comparison](storyteller-preference-results.md) for
+examples where these signals disagreed.
 
 The benchmark takes a JSON array. Each case has `id`, `task` (`classifier`, `storyteller`, `rules`, or `player`), `prompt` chat messages, and `provenance.split` (`validation`, `test`, or `synthetic`). Optional `schema` supplies a JSON schema to the local runtime. Optional `checks` has:
 

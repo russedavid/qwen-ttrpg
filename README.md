@@ -92,7 +92,7 @@ ttrpg-pipeline run /path/to/private/experiment.yaml
 
 Optional `annotate` uses a local untuned base to propose classifier/rules labels. Those proposals stay pending. Model-reviewed labels require explicit opt-in and retain their origin. A raw conversation supplies narrator responses, but does not automatically provide reliable event labels or rule answers.
 
-For storyteller data needing speaker-boundary repair or editorial work, use the [response workshop](docs/story-workshop.md). It preserves source text, records corrections and edited targets separately, and exports the existing training format. The [training strategy](docs/storyteller-strategy.md) describes data comparisons, preference training and quality gates.
+For storyteller data needing speaker-boundary repair or editorial work, use the [response workshop](docs/story-workshop.md). It preserves source text, records corrections and edited targets separately, and exports the existing training format. The [training strategy](docs/storyteller-strategy.md) describes data comparisons and quality gates; the [preference-training guide](docs/story-preferences.md) runs reviewed DPO pairs from a verified supervised checkpoint.
 
 ## What is verified
 
@@ -105,6 +105,8 @@ For storyteller data needing speaker-boundary repair or editorial work, use the 
 - Benchmarks verify the server's adapter inventory, apply the training contracts to outputs, and report latency and control results separately from subjective usefulness. A/B display order is independent of execution order.
 
 Source and target checks cannot prove semantic truth. Lower loss does not establish better storytelling. CI exercises code behavior; private data and weights are needed to reproduce a particular model result. This repository reproduces the **method with your data**, not a previously trained model's quality claims.
+
+The [supervised and preference-training results](docs/storyteller-preference-results.md) report completed GPU runs, blinded comparisons and application replay, including why the new candidate was not selected as the default.
 
 [Data contracts](docs/dataset-interface.md) · [Evaluation protocol](docs/evaluation.md) · [Workflow verification](docs/verification.md) · [Individual stage commands](docs/individual-stages.md)
 

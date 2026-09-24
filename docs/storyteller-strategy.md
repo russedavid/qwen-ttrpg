@@ -2,6 +2,8 @@
 
 The objective is a useful next response in an ongoing interaction: answer the participants, preserve continuity and agency, and offer something the facilitator can use. Reproducing the sound of a transcript is insufficient.
 
+The [completed four-run SFT and DPO experiment](storyteller-preference-results.md) applies this sequence. It improved some editorial preferences without earning promotion over the base writer. The guidance below remains an experimental method, not a promise that more training improves every measure.
+
 ## Data first
 
 The [previous pilot](storyteller-results.md) improved voice preference without beating the base on strict source-and-task checks. Its exposed failures now belong to development regressions. Improvements against those cases are not fresh held-out results.
