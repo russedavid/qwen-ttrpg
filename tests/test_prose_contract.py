@@ -148,3 +148,12 @@ def test_real_streamed_invalid_output_is_preserved_and_counted(tmp_path, monkeyp
     assert failed["server_timings"] == {"predicted_ms": 3}
     assert failed["seconds"] >= 0 and failed["time_to_first_text_seconds"] is not None
     assert saved["cases"][1]["answers"]["adapter"]["checks"]["plain_text_contract"]
+
+
+@pytest.mark.parametrize("text", ['{"narration": unfinished', '{\n  "new_arbitrary_field": "unfinished'])
+def test_malformed_object_is_rejected_but_narrative_mentions_are_valid(text):
+    from qwen_ttrpg.story_contract import validate_text
+    with pytest.raises(ValueError, match="JSON object"):
+        validate_text(text)
+    spoken='“The document has a narration field,” says the guard.'
+    assert validate_text(spoken) == spoken

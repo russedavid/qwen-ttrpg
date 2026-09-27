@@ -63,6 +63,10 @@ def validate_text(value):
     fenced = re.fullmatch(r"(?P<fence>`{3,}|~{3,})[\s\S]*(?P=fence)", stripped)
     if fenced or stripped.lower().startswith("```json"):
         raise ValueError("The storyteller returned fenced output instead of prose.")
+    # A broken JSON object is still structured output. Match syntax at the
+    # start rather than rejecting ordinary prose that mentions a field name.
+    if re.match(r'^[{]\s*"[^"\n]+"\s*:', stripped):
+        raise ValueError("The storyteller returned a JSON object instead of prose.")
     try:
         parsed = json.loads(stripped)
     except ValueError:
