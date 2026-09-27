@@ -6,7 +6,7 @@ from pathlib import Path
 import random
 import statistics
 
-from .benchmark import local_endpoint, render_review, score
+from .benchmark import local_endpoint, render_review, score, validate_prose_output
 from .generation import generate
 from .util import digest, now, packed
 
@@ -51,6 +51,15 @@ def run(
         raise ValueError(
             "Use held-out or original evaluation cases, never the training split."
         )
+    if any(c["task"] == "storyteller" and not c.get("schema") for c in cases):
+        from .story_contract import VERSION
+
+        for label, adapter in variants.items():
+            if adapter is not None and routing["adapters"][adapter].get("story_contract") != VERSION:
+                raise ValueError(
+                    f"Candidate {label!r} must declare the current prose contract {VERSION} "
+                    "before it can be evaluated on storyteller prose cases."
+                )
     if generator is generate:
         from .annotation import verify_server
 
@@ -87,6 +96,7 @@ def run(
                     schema=case.get("schema"),
                 )
                 answer["checks"] = score(answer["text"], case.get("checks", {}))
+                validate_prose_output(case, answer)
             except Exception as exc:
                 answer = {
                     "text": "",
@@ -139,6 +149,7 @@ def run(
         report["summary"][label] = {
             "attempts": len(values),
             "complete": sum(v["complete"] for v in values),
+            "control_passes": sum(v["complete"] and all(v["checks"].values()) for v in values),
             "median_seconds": statistics.median(times) if times else None,
         }
     (output / "results.json").write_text(packed(report))

@@ -8,7 +8,7 @@ from pathlib import Path
 TASKS = {"classifier", "storyteller", "rules", "auditor", "player", "planner"}
 
 
-def selection(task, configuration=None):
+def selection(task, configuration=None, *, output_kind=None):
     if task not in TASKS:
         raise ValueError("Unknown model task.")
     if configuration is None:
@@ -27,6 +27,11 @@ def selection(task, configuration=None):
         raise ValueError("Task points to an unavailable adapter.")
     if task == "auditor" and chosen is not None:
         raise ValueError("Data screening must use the independent untuned base.")
+    if task == "storyteller" and output_kind == "plain_text" and chosen is not None:
+        from .story_contract import VERSION
+        # Unmarked/legacy JSON adapters are diagnostic artifacts, not prose adapters.
+        if adapters[chosen].get("story_contract") != VERSION:
+            chosen = None
     # Explicit zeros also avoid runtimes where an omitted or empty list preserves
     # an earlier adapter configuration. Never POST a global scale change.
     return [{"id": i, "scale": 1.0 if i == chosen else 0.0} for i in ids], chosen

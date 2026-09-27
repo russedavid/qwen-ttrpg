@@ -12,7 +12,7 @@ def test_three_candidates_have_identical_sampling_and_blind_metadata_is_separate
     def fake(url, model, messages, adapter, count, max_tokens, **kwargs):
         calls.append((messages, adapter, count, max_tokens, kwargs))
         return {
-            "text": '{"narration":"The bell rings."}',
+            "text": "The bell rings.",
             "complete": True,
             "seconds": 1,
             "settings": {"adapter": adapter},
@@ -29,7 +29,8 @@ def test_three_candidates_have_identical_sampling_and_blind_metadata_is_separate
     ]
     result = run(
         cases,
-        {"adapters": [{"id": 0}, {"id": 1}], "tasks": {}},
+        {"adapters": [{"id": 0, "story_contract": "story-prose-v1"},
+                      {"id": 1, "story_contract": "story-prose-v1"}], "tasks": {}},
         {"base": None, "old": 0, "new": 1},
         "http://localhost/v1",
         "model",
@@ -59,3 +60,34 @@ def test_three_candidates_have_identical_sampling_and_blind_metadata_is_separate
             tmp_path / "invalid",
             generator=fake,
         )
+
+
+@pytest.mark.parametrize("marker", [None, "legacy-json", "story-prose-v0"])
+def test_prose_candidate_contract_is_checked_before_network_or_output(tmp_path, monkeypatch, marker):
+    from qwen_ttrpg import annotation
+
+    calls = []
+    monkeypatch.setattr(annotation, "verify_server", lambda *args: calls.append(args))
+    adapter = {"id": 0}
+    if marker is not None:
+        adapter["story_contract"] = marker
+    output = tmp_path / "comparison"
+    cases = [{"id": "story", "task": "storyteller", "prompt": [],
+              "provenance": {"split": "synthetic"}}]
+    with pytest.raises(ValueError, match="current prose contract"):
+        run(cases, {"adapters": [adapter], "tasks": {}}, {"base": None, "legacy": 0},
+            "http://localhost/v1", "fixture", output)
+    assert not output.exists() and calls == []
+
+
+def test_nonstory_candidates_do_not_require_a_prose_contract(tmp_path):
+    cases = [{"id": "extraction", "task": "classifier", "prompt": [],
+              "schema": {"type": "object"}, "provenance": {"split": "synthetic"}}]
+
+    def fake(*args, **kwargs):
+        return {"text": '{"events":[]}', "complete": True, "seconds": 1}
+
+    report = run(cases, {"adapters": [{"id": 0}], "tasks": {}},
+                 {"base": None, "extractor": 0}, "http://localhost/v1", "fixture",
+                 tmp_path / "extraction", generator=fake)
+    assert report["status"] == "complete"

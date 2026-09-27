@@ -259,6 +259,8 @@ def serving_command(config, output):
                 raise ValueError("All selected adapters must pass training, reload, and conversion first.")
             verify_outputs(record)
         args += ["--adapter", task + "=" + journal["stages"][task + ":convert"]["outputs"]["gguf"]]
+    from .story_contract import VERSION
+    args += ["--story-contract", VERSION]
     return args
 
 
@@ -310,7 +312,8 @@ def evaluate(config, journal):
                 for task in TASKS:
                     for line in (root / "datasets" / task / (split + ".sources.jsonl")).read_text().splitlines():
                         row = json.loads(line)
-                        row.update(contract_version=1, target=json.loads(row["completion"][0]["content"]))
+                        row.update(contract_version=2 if task == "storyteller" else 1,
+                                   target=row["completion"][0]["content"] if task == "storyteller" else json.loads(row["completion"][0]["content"]))
                         cases.append(row)
                 if not cases:
                     continue

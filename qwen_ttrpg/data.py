@@ -14,7 +14,7 @@ from uuid import uuid4
 from format_conversation_dataset.pipeline import read_source, response_examples, prepare, verify_splits
 import yaml
 
-from .contracts import exact_quote, validate_target, output_schema
+from .contracts import exact_quote, validate_target, output_schema, completion_text
 from .tasks import POLICIES
 from .util import digest, file_digest, now, packed
 
@@ -77,7 +77,7 @@ def source_path(config, value):
 
 def task_messages(task, body, context=""):
     return [{"role": "system", "content": POLICIES[task] + ("\n" + context if context else "")},
-            {"role": "user", "content": packed(body)}]
+            {"role": "user", "content": body if task == "storyteller" and isinstance(body, str) else packed(body)}]
 
 
 def candidate(task, body, provenance, config, target=None):
@@ -158,11 +158,11 @@ def build_candidates(config):
                 continue
             if not response["context"] or response["context"][-1]["role"] != "player":
                 continue
-            body = {"recent_dialogue": response["context"], "instruction": "Respond to the latest player contribution. Return narration as JSON."}
+            body = {"recent_dialogue": response["context"], "instruction": "Respond to the latest player contribution with only ready-to-speak Keeper prose."}
             p = {**provenance, "target_turn": response["target_turns"][0],
                  "target_turns": response["target_turns"], "context_turns": [t["turn"] for t in response["context"]],
                  "protected_context_turns": response["protected_context_turns"], "source_response_sha256": response["target_sha256"]}
-            result.append(candidate("storyteller", body, p, config, {"narration": response["response"]}))
+            result.append(candidate("storyteller", body, p, config, response["response"]))
 
     documents = {}
     for item in config.get("rule_documents", []):
@@ -318,9 +318,13 @@ def prepare_all(config, tokenizer):
         if task == "storyteller" and not decision.get("response_complete"):
             raise ValueError("A storyteller response needs a complete-response review.")
         row = {"id": digest(packed(case["prompt"]) + packed(target)), "task": task, "prompt": case["prompt"],
-               "completion": [{"role": "assistant", "content": packed(target)}], "schema": case["schema"],
+               "completion": [{"role": "assistant", "content": completion_text(task, target)}], "schema": case["schema"],
                "provenance": {**p, "candidate_id": case["id"], "label_origin": case["label_origin"],
                               "review_level": origin + "-reviewed", "review": decision}}
+        if task == "storyteller":
+            from .story_contract import VERSION
+            row.pop("schema", None)
+            row.update(output_kind="plain_text", story_contract=VERSION)
         by_task[task][p["split"]].append(row)
     # Check common source identities across tasks too; the same conversation may
     # support multiple adapters, but cannot train one and evaluate another.

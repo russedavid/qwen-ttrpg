@@ -8,15 +8,15 @@ from qwen_ttrpg import generation
 
 def cases():
     return [{"id": str(i), "task": "storyteller", "prompt": [{"role": "user", "content": "Describe a quiet harbor."}],
-             "provenance": {"split": "synthetic"}, "checks": {"nonempty": ["narration"]}} for i in range(8)]
+             "provenance": {"split": "synthetic"}, "checks": {}} for i in range(8)]
 
 
 def test_blinding_does_not_leak_adapter_ids_or_timing(tmp_path):
     def fake(*args, **kwargs):
-        return {"text": '{"narration":"<A lantern glows.>"}', "seconds": 1.5,
+        return {"text": '<A lantern glows.>', "seconds": 1.5,
                 "time_to_first_text_seconds": .1, "complete": True,
                 "settings": {"adapter": args[3]}}
-    routing = {"adapters": [{"id": 0}], "tasks": {"storyteller": 0}}
+    routing = {"adapters": [{"id": 0, "story_contract": "story-prose-v1"}], "tasks": {"storyteller": 0}}
     report = run(cases(), routing, "http://127.0.0.1:8091/v1", "local", tmp_path / "run", generator=fake)
     assert report["summary"]["adapter"]["complete"] == 8
     page = (tmp_path / "run/review.html").read_text()
@@ -49,9 +49,9 @@ def test_contract_checks_are_explicit():
 
 def test_truncated_outputs_remain_failures_in_a_completed_study(tmp_path):
     def incomplete(*args, **kwargs):
-        return {"text": '{"narration":"A lantern glows."}', "seconds": 1,
+        return {"text": 'A lantern glows.', "seconds": 1,
                 "complete": False, "finish_reason": "length"}
-    routing = {"adapters": [{"id": 0}], "tasks": {"storyteller": 0}}
+    routing = {"adapters": [{"id": 0, "story_contract": "story-prose-v1"}], "tasks": {"storyteller": 0}}
     report = run(cases(), routing, "http://localhost/v1", "fixture", tmp_path / "study", generator=incomplete)
     assert report["status"] == "complete" and len(report["cases"]) == 8
     for summary in report["summary"].values():

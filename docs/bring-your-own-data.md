@@ -141,9 +141,9 @@ Edit only `target` fields for classifier/rules labels. Do not rewrite input cont
 
 - **Classifier:** `events` and `uncertainties`. Events identify `kind`, `entity`, `attribute`, `value`, `delta`, `stage`, `visibility`, `evidence`, `resolves`, and `supersedes`. `evidence` contains exact `turn`/`quote` pairs and must cite the target window. Resource changes require established outcomes; an action is not itself a completed effect. Claims retain reported status. Source membership does not prove that a proposed label is semantically supported.
 - **Rules:** `answer`, `citations` (`id` and exact `quote`), `calculation`, and `missing_information`. An assertion needs a supplied citation or an explicit information gap. `calculation` is null unless a declared tool can be called using explicit supplied inputs.
-- **Storyteller:** `narration`. Preserve the complete original response. Review whether it actually responds to the preceding players, respects agency, and is suitable supervision; a transcript continuation is not automatically a good example.
+- **Storyteller:** a raw text string, with no `narration` object or other model-authored fields. Preserve the complete original response. Review whether it actually responds to the preceding players, respects agency, and is suitable supervision; a transcript continuation is not automatically a good example.
 
-`contracts.py` supplies the exact Pydantic models and runtime JSON schemas. Training serialization and constrained generation use the same field ordering and explicit nullable fields.
+`contracts.py` supplies the structured tasks’ Pydantic models and runtime JSON schemas. For storyteller it validates nonempty prose, returns no output schema, and preserves raw text in training. Structured-task serialization and constrained generation retain their field ordering and explicit nullable fields.
 
 For a calculation, declare its name and JSON Schema under `tools`. A question may provide `tool_inputs: {tool-name: {...}}`; a target calculation uses `{"tool": "tool-name", "arguments": {...}}`. Arguments must validate against the declaration and equal the supplied inputs. This trains routing and abstention; the toolkit does not execute arbitrary functions or contain a hidden game-specific calculator.
 

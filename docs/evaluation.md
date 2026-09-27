@@ -36,7 +36,7 @@ See the [storyteller pilot](storyteller-results.md) and the subsequent
 [supervised and preference comparison](storyteller-preference-results.md) for
 examples where these signals disagreed.
 
-The benchmark takes a JSON array. Each case has `id`, `task` (`classifier`, `storyteller`, `rules`, or `player`), `prompt` chat messages, and `provenance.split` (`validation`, `test`, or `synthetic`). Optional `schema` supplies a JSON schema to the local runtime. Optional `checks` has:
+The benchmark takes a JSON array. Each case has `id`, `task` (`classifier`, `storyteller`, `rules`, or `player`), `prompt` chat messages, and `provenance.split` (`validation`, `test`, or `synthetic`). For structured tasks, optional `schema` supplies a JSON schema to the local runtime. Storyteller requests omit it and return ordinary text. Their user message may be an explicit Keeper brief or a serialized context object; old field names are not required. A storyteller adapter must be explicitly marked `story_contract: story-prose-v1` in the routing inventory. Optional `checks` has:
 
 - `equals`: mapping of dot-separated response paths to exact expected values. Numeric path elements select array positions.
 - `nonempty`: top-level fields that must contain a truthy value.

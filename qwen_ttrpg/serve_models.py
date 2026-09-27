@@ -83,6 +83,8 @@ def main():
     p.add_argument("--model-alias", default="qwen3.8-27b-q4")
     p.add_argument("--gpu", type=int, help="Physical GPU index for the single-GPU layout")
     p.add_argument("--chat-template", help="Explicit inference template, including a saved training template")
+    from .story_contract import VERSION
+    p.add_argument("--story-contract", choices=[VERSION], help="Explicit contract of a prose-trained storyteller adapter; never use for legacy JSON adapters.")
     p.add_argument("--output", required=True)
     args = p.parse_args()
     if args.gpu is not None and (args.gpu < 0 or args.layout != "single"):
@@ -112,6 +114,10 @@ def main():
                 "bytes": path.stat().st_size,
             }
         )
+    if args.story_contract:
+        if "storyteller" not in tasks:
+            raise ValueError("--story-contract requires a storyteller adapter.")
+        inventory[tasks["storyteller"]]["story_contract"] = args.story_contract
     names = set(tasks)
     for item in args.candidate:
         name, path = item.split("=", 1)

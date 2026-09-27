@@ -62,6 +62,7 @@ ttrpg-serve --runtime /path/to/llama.cpp \
   --base /path/to/local/base.gguf \
   --adapter classifier=/path/to/private/classifier.gguf \
   --adapter storyteller=/path/to/private/storyteller.gguf \
+  --story-contract story-prose-v1 \
   --adapter rules=/path/to/private/rules.gguf \
   --layout split --tensor-split 1,1 --context 16384 --slots 1 \
   --output /path/to/private/serving-run

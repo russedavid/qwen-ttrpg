@@ -57,8 +57,13 @@ def candidate(source, proposal, contract):
     text = proposal.get("rewritten", "").strip()
     if not text:
         raise ValueError("An edited response is required.")
-    target = {**copy.deepcopy(contract["empty_response"]), "narration": text}
-    Draft202012Validator(contract["schema"]).validate(target)
+    prose = contract.get("output_kind") == "plain_text"
+    if prose:
+        from .story_contract import validate_text
+        target = validate_text(text)
+    else:
+        target = {**copy.deepcopy(contract["empty_response"]), "narration": text}
+        Draft202012Validator(contract["schema"]).validate(target)
     dialogue = [{"ordinal": i, "speaker": s["role"] + "-text-attributed", "role": s["role"],
                  "text": s["quote"], "visibility": "public"} for i,s in enumerate(context, 1)]
     body = {"dialogue": dialogue, "new_player_input": "\n".join(s["quote"] for s in located["participant"]),
@@ -79,7 +84,7 @@ def candidate(source, proposal, contract):
                   "label_origin": "model-edited", "role_origin": "text-inferred; audio unverified"}
     result = {"prompt": [{"role": "system", "content": contract["system"]},
                          {"role": "user", "content": packed(body)}],
-              "target": target, "schema": contract["schema"], "provenance": provenance,
+              "target": target, "schema": contract.get("schema"), "output_kind": "plain_text" if prose else "legacy_json", "provenance": provenance,
               "editorial_notes": {k: proposal[k] for k in ("skill", "reason", "creative_scope")},
               "review": {"verdict": "pending"}}
     result["id"] = digest(packed(result))

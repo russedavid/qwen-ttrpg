@@ -46,6 +46,19 @@ def score(text, checks):
     return results
 
 
+def validate_prose_output(case, answer):
+    """Record contract failure without discarding the raw generation or metrics."""
+    if case["task"] != "storyteller" or case.get("schema"):
+        return
+    from .story_contract import validate_text
+    try:
+        validate_text(answer["text"])
+        answer["checks"]["plain_text_contract"] = True
+    except ValueError as exc:
+        answer["checks"]["plain_text_contract"] = False
+        answer["validation_error"] = str(exc)
+
+
 def run(cases, routing, url, model, output, *, max_tokens=384, seed=42, profile="production", generator=generate):
     local_endpoint(url)
     output = Path(output)
@@ -56,7 +69,7 @@ def run(cases, routing, url, model, output, *, max_tokens=384, seed=42, profile=
     for case in cases:
         if case.get("provenance", {}).get("split") not in {"validation", "test", "synthetic"}:
             raise ValueError("Benchmark only held-out or original synthetic cases.")
-        _, adapter = selection(case["task"], routing)
+        _, adapter = selection(case["task"], routing, output_kind="plain_text" if case["task"] == "storyteller" and not case.get("schema") else None)
         if adapter is None:
             raise ValueError("Each benchmark task must select a candidate adapter.")
     if generator is generate:
@@ -65,7 +78,7 @@ def run(cases, routing, url, model, output, *, max_tokens=384, seed=42, profile=
     output.mkdir(parents=True)
     results, keys = [], {}
     for case in cases:
-        _, adapter = selection(case["task"], routing)
+        _, adapter = selection(case["task"], routing, output_kind="plain_text" if case["task"] == "storyteller" and not case.get("schema") else None)
         order = ["base", "adapter"]
         random.Random(f"generation:{seed}:{case['id']}").shuffle(order)
         answers = {}
@@ -74,10 +87,11 @@ def run(cases, routing, url, model, output, *, max_tokens=384, seed=42, profile=
                                len(routing["adapters"]), max_tokens, task=case["task"],
                                sampling_profile=profile, seed=seed, schema=case.get("schema"))
             answer["checks"] = score(answer["text"], case.get("checks", {}))
-            if case.get("contract_version") == 1:
+            validate_prose_output(case, answer)
+            if case.get("contract_version") in {1, 2}:
                 from .contracts import validate_target
                 try:
-                    actual = validate_target(case["task"], json.loads(case["prompt"][-1]["content"]), json.loads(answer["text"]))
+                    actual = validate_target(case["task"], {} if case["task"] == "storyteller" else json.loads(case["prompt"][-1]["content"]), answer["text"] if case["task"] == "storyteller" else json.loads(answer["text"]))
                     answer["checks"]["schema_and_source_checks"] = True
                     target = case["target"]
                     if case["task"] == "classifier":

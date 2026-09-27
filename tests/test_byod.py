@@ -66,7 +66,7 @@ def test_review_input_edits_and_narrator_rewrites_are_rejected(config):
     with pytest.raises(ValueError, match="inputs changed"):
         data.load_review(config)
     edited = copy.deepcopy(original)
-    next(c for c in edited["candidates"] if c["task"] == "storyteller")["target"]["narration"] = "Invented response"
+    next(c for c in edited["candidates"] if c["task"] == "storyteller")["target"] = "Invented response"
     data.write_json(path, edited)
     with pytest.raises(ValueError, match="source wording"):
         data.load_review(config)

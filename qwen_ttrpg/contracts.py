@@ -94,7 +94,6 @@ class PlayerReply(Record):
 MODELS = {
     "classifier": Extraction,
     "rules": RulesAnswer,
-    "storyteller": Narration,
     "player": PlayerReply,
 }
 
@@ -110,6 +109,8 @@ def exact_quote(source, quote):
 
 def output_schema(task):
     """Match sorted training serialization; nullable fields are still explicit."""
+    if task == "storyteller":
+        return None
     schema = copy.deepcopy(MODELS[task].model_json_schema())
 
     def visit(item):
@@ -128,6 +129,9 @@ def output_schema(task):
 
 
 def validate_target(task, body, target):
+    if task == "storyteller":
+        from .story_contract import validate_text
+        return validate_text(target)
     parsed = MODELS[task].model_validate(target)
     if task == "classifier":
         target_turns = {t["turn"] for t in body["target_turns"]}
@@ -191,3 +195,12 @@ def validate_target(task, body, target):
                 "The player selected a recipient outside the supplied perspective."
             )
     return parsed.model_dump()
+
+
+def completion_text(task, target):
+    """Never JSON-encode storyteller prose, including quoted NPC dialogue."""
+    if task == "storyteller":
+        from .story_contract import validate_text
+        return validate_text(target)
+    from .util import packed
+    return packed(target)

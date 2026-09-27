@@ -1,4 +1,8 @@
-"""Streaming local generation with explicit adapter scales and measured latency."""
+"""Capture raw streamed generation, adapter scales and measured latency.
+
+A normally terminated generation is complete, not necessarily valid. Consumers
+validate its contract so even malformed outputs remain available for evaluation.
+"""
 import json
 import time
 import httpx
@@ -34,6 +38,8 @@ def generate(
             for i in range(adapter_count)
         ],
     }
+    if task == "storyteller" and schema:
+        raise ValueError("Storyteller generation requires plain text, without a JSON schema.")
     if schema:
         payload["response_format"] = {
             "type": "json_schema",
@@ -57,6 +63,8 @@ def generate(
                 if data == "[DONE]":
                     break
                 chunk = json.loads(data)
+                if chunk.get("error"):
+                    raise ValueError(f"Generation stream failed: {chunk['error']}")
                 if chunk.get("usage"):
                     usage = chunk["usage"]
                 if chunk.get("timings"):
@@ -84,5 +92,6 @@ def generate(
             "thinking": False,
             "cache_prompt": False,
             "adapter": adapter,
+            "output_kind": "plain_text" if task == "storyteller" else "structured" if schema else "text",
         },
     }

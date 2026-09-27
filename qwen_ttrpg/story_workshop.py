@@ -108,11 +108,13 @@ def collect(document, contract, *, context_turns=24):
         raise ValueError("Choose a positive context window.")
     if not isinstance(contract.get("system"), str) or not contract["system"].strip():
         raise ValueError("Supply the actual writer system instruction.")
-    schema = contract["schema"]
-    Draft202012Validator.check_schema(schema)
-    template = contract["empty_response"]
-    if not isinstance(template, dict) or "narration" not in template:
-        raise ValueError("Supply the writer's empty response, including narration.")
+    prose = contract.get("output_kind") == "plain_text"
+    schema = contract.get("schema")
+    template = contract.get("empty_response")
+    if not prose:
+        Draft202012Validator.check_schema(schema)
+        if not isinstance(template, dict) or "narration" not in template:
+            raise ValueError("Supply an explicit prose contract or legacy response schema.")
     ownership, seen_sources = {}, set()
     cases, omitted, role_counts = [], Counter(), Counter()
     for source in document["sources"]:
@@ -188,8 +190,12 @@ def collect(document, contract, *, context_turns=24):
                     "private_facilitator_direction": "", "rules": [], "documents": [],
                     "historical_claims_and_hypotheses": [], "historical_source_passages": [],
                     "instruction": "Respond to the current participants. Suggestions do not establish observed facts."}
-            target = {**copy.deepcopy(template), "narration": text}
-            Draft202012Validator(schema).validate(target)
+            target = text if prose else {**copy.deepcopy(template), "narration": text}
+            if prose:
+                from .story_contract import validate_text
+                validate_text(target)
+            else:
+                Draft202012Validator(schema).validate(target)
             provenance = {"group": group, "family": source.get("family", group), "split": split,
                           "source_identity": identity, "source_sha256": source_hash,
                           "target_turn": targets[0]["ordinal"], "target_turns": [t["ordinal"] for t in targets],
@@ -210,7 +216,7 @@ def collect(document, contract, *, context_turns=24):
             case["id"] = fingerprint(case)
             cases.append(case)
             i = end
-    return {"version": 1, "created": now(), "schema": schema, "contract_sha256": fingerprint(contract),
+    return {"version": 2 if prose else 1, "output_kind": "plain_text" if prose else "legacy_json", "created": now(), "schema": schema, "contract_sha256": fingerprint(contract),
             "source_snapshot_sha256": fingerprint(document), "cases": cases,
             "audit": {"source_collections": len(seen_sources), "roles": dict(role_counts),
                       "candidates": len(cases), "omitted": dict(omitted)}}
@@ -294,15 +300,24 @@ def export_rows(document, decisions, *, allow_model_reviews=False):
         target = review["target"]
         if review.get("reviewed_target_sha256") != fingerprint(target):
             raise ValueError("Target changed or was not bound to its review.")
-        Draft202012Validator(document["schema"]).validate(target)
-        if not any(isinstance(v, str) and v.strip() or isinstance(v, list) and v for v in target.values()):
+        prose = document.get("output_kind") == "plain_text"
+        if prose:
+            from .story_contract import validate_text
+            validate_text(target)
+        else:
+            Draft202012Validator(document["schema"]).validate(target)
+        if not prose and not any(isinstance(v, str) and v.strip() or isinstance(v, list) and v for v in target.values()):
             raise ValueError("An empty structured response is not a useful training target.")
         p = {**case["provenance"], "workshop_case": key, "source_case_sha256": fingerprint(case),
              "target_sha256": fingerprint(target), "label_origin": "source" if target == case["original"] else review["origin"] + "-edited",
              "review_level": review["origin"] + "-reviewed", "review": copy.deepcopy(review)}
         row = {"id": digest(packed(case["prompt"]) + packed(target)), "task": "storyteller",
-               "prompt": copy.deepcopy(case["prompt"]), "completion": [{"role": "assistant", "content": packed(target)}],
+               "prompt": copy.deepcopy(case["prompt"]), "completion": [{"role": "assistant", "content": target if prose else packed(target)}],
                "schema": document["schema"], "provenance": p}
+        if prose:
+            from .story_contract import VERSION
+            row.pop("schema", None)
+            row.update(output_kind="plain_text", story_contract=VERSION)
         result[p["split"]].append(row)
     verify_splits(result)
     families = {}
@@ -339,7 +354,7 @@ def render(cases, decisions, output):
         parts.append(f'<article id="case-{i}"><h2>{i+1}. {esc(r["verdict"])} · {esc(p["split"])}</h2><p>{esc(p["group"])} · response {esc(p["target_turns"])} · {esc(c["flags"])}</p>')
         for t in c["source_context"]:
             parts.append(f'<p><strong>{t["ordinal"]} · {esc(t["role"])} · {esc(t["speaker"])}</strong><br>{esc(t["text"])}</p>')
-        parts.append(f'<h3>Original response</h3><blockquote>{esc(c["original"]["narration"])}</blockquote><h3>Training target</h3><pre class="target">{esc(r["target"])}</pre><h3>Review</h3><pre>{esc({k:v for k,v in r.items() if k != "target"})}</pre></article>')
+        parts.append(f'<h3>Original response</h3><blockquote>{esc(c["original"] if isinstance(c["original"], str) else c["original"]["narration"])}</blockquote><h3>Training target</h3><pre class="target">{esc(r["target"])}</pre><h3>Review</h3><pre>{esc({k:v for k,v in r.items() if k != "target"})}</pre></article>')
     Path(output).write_text("".join(parts), encoding="utf-8")
 
 

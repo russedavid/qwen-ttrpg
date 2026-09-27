@@ -12,6 +12,22 @@ Bring your own conversations and rule references. Prepare and review the example
 
 The game system, speaker mappings, terminology, rule excerpts, and labels are supplied externally. No recordings, source conversations, rulebooks, private datasets, or trained weights are distributed. The included example generator creates short, original synthetic fixtures in a directory you choose outside Git.
 
+## Plain-text storyteller contract
+
+Storyteller examples use raw assistant prose, without a JSON response grammar or
+a `narration` object. Import `qwen_ttrpg.story_contract.contract()` for the reusable
+Keeper instruction and pass that contract to the source workshop/span tools.
+The BYOD pipeline exports this contract by default. Classifier, rules and player
+tasks keep their structured contracts. Story drafts are proposals; only the
+separate observed-conversation extractor supplies state changes.
+
+For a newly trained prose storyteller, pass `--story-contract story-prose-v1`
+to `ttrpg-serve` to explicitly mark the selected storyteller adapter's contract.
+Do not use this marker for an older JSON-trained adapter. Unmarked adapters are
+not eligible for current prose routing; old schemas and explicit legacy workshop
+contracts remain available for archived diagnostics. The current BYOD pipeline
+binds its verified training/export inputs before adding this serving marker.
+
 ## Install
 
 Python 3.10+ runs the CPU data/review tooling on Linux or macOS. Git is required during installation: the companion [Conversational Dataset Formatter](https://github.com/russedavid/format_conversation_dataset) is pinned to a specific source revision and installed automatically.
@@ -105,6 +121,8 @@ For storyteller data needing speaker-boundary repair or editorial work, use the 
 - Benchmarks verify the server's adapter inventory, apply the training contracts to outputs, and report latency and control results separately from subjective usefulness. A/B display order is independent of execution order.
 
 Source and target checks cannot prove semantic truth. Lower loss does not establish better storytelling. CI exercises code behavior; private data and weights are needed to reproduce a particular model result. This repository reproduces the **method with your data**, not a previously trained model's quality claims.
+
+Earlier writer measurements used the legacy structured contract. They remain historical diagnostics, not measurements of the current plain-prose contract.
 
 The [supervised and preference-training results](docs/storyteller-preference-results.md) report completed GPU runs, blinded comparisons and application replay, including why the new candidate was not selected as the default.
 

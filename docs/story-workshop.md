@@ -6,7 +6,7 @@ Use this offline tool when source conversations need boundary repair or editoria
 
 Supply a private JSON file with a `sources` list. Each source has `group` (story/campaign), `split` (`train`, `validation`, `test`), a stable `source_identity`, and `turns`. An optional `family` links related scenarios or adaptations. Each turn has an increasing integer `ordinal`, `speaker`, `role`, and `text`. Roles are `facilitator`, `player`, `observer`, `unknown`, or `mixed`. Optional fields include `character`, `visibility`, `category`, `status`, revision IDs and timestamps.
 
-Supply a second JSON file with the application's actual writer `system` instruction, response `schema`, and `empty_response` object containing a `narration` field. Mining fills narration with the original response. The prompt contains `dialogue`, `new_player_input`, and empty reference-material lists. No state summary or future revelation is inferred from the answer.
+Supply a second JSON file containing `qwen_ttrpg.story_contract.contract()`: the writer `system` instruction, `output_kind: plain_text`, and `schema: null`. Mining preserves the original response as a text string; exports place that string directly in the assistant completion. Explicit older `schema`/`empty_response` contracts remain supported for archived diagnostics, but are not converted or relabeled as prose. The prompt contains `dialogue`, `new_player_input`, and empty reference-material lists. No state summary or future revelation is inferred from the answer.
 
 ```sh
 python -m qwen_ttrpg.story_workshop collect \
